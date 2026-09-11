@@ -11,8 +11,9 @@ UI/UX can be modernized rather than copied 1:1.
 
 Core app complete and verified (2026-09-11): storage, all five screens, and the
 end-to-end Log → History → Progress → Stats flow are implemented and exercised
-(see Verification log). Remaining: the actual `eas build` must be run by the
-user (needs an Expo login — see Final build). This file is the source of truth
+(see Verification log). An installable release APK has been built locally
+(no EAS/Expo account) via `scripts/build-apk.sh` — see Final build. Next step
+is the user's on-device test. This file is the source of truth
 for plan, progress, decisions, and blockers — update it continuously as work
 happens. If a session ends (out of context/tokens) or a different model picks
 this up, read this file first before doing anything else.
@@ -204,6 +205,12 @@ confirmed all 3 persisted correctly with exact same values.")
 - Final checks after the last dependency change (expo-system-ui added, jest
   dev deps removed): `npx tsc --noEmit` clean, `npx expo-doctor` 21/21, and
   `npx expo export --platform android` bundled without errors.
+- Local release APK verified (2026-09-11): `./gradlew assembleRelease` (run in
+  three stages, see Final build) exited 0 → `app-release.apk`, 31.6 MiB.
+  `apksigner verify` passes (signed with the generated debug keystore, so it
+  installs as an update over itself and keeps data); `aapt dump badging` shows
+  package `com.amirhusni.ironlog` 1.0.0, label "Iron Log", minSdk 24,
+  targetSdk 36, native-code arm64-v8a only. Not yet run on a phone.
 
 ## Blockers / known issues
 
@@ -243,40 +250,39 @@ plan, or anything left unfinished, with reasoning.)
 
 ## Final build
 
-- EAS build status: **ready, not run here.** `eas-cli` 24.1.2 runs via `npx`
-  in this environment but no Expo account is logged in (`eas whoami` → "Not
-  logged in"), and logging in is interactive, so the cloud build has to be
-  started by the user. Everything EAS needs is in place and verified:
-  - `eas.json` has a `preview` profile (internal distribution, `buildType:
-    "apk"`) and a `production` profile (also APK, auto-incrementing version).
-    EAS defaults to an AAB otherwise, so these profiles are what make it
-    produce an installable `.apk`.
-  - `app.json` has `android.package` / `ios.bundleIdentifier`
-    (`com.amirhusni.ironlog`), the config plugins for expo-sqlite,
-    expo-sharing and the date picker (auto-added by `expo install`), and
-    `userInterfaceStyle: "dark"` backed by `expo-system-ui`.
-  - `npx expo prebuild --platform android --no-install` (the first thing an EAS
-    Android build does) completed with exit 0 on 2026-09-11 and generated a
-    native project with the right `applicationId`; the generated `android/`
-    folder was deleted again afterwards to stay on the managed workflow (it's
-    gitignored and EAS regenerates it).
-  - `npx expo-doctor` → 21/21 checks passed; `npx expo export --platform
-    android` bundles cleanly (see Verification log).
-- A local (non-EAS) APK build isn't possible in this container: there's a JDK
-  (25) and Gradle but no Android SDK (`ANDROID_HOME` unset, no `sdkmanager`),
-  and JDK 25 is newer than the Android Gradle Plugin officially supports.
-- Instructions for producing the final .apk (run from the project root):
-  1. `npx eas-cli login` (or `npm i -g eas-cli` then `eas login`) — use your
-     Expo account; create one at expo.dev if needed.
-  2. `npx eas-cli init` — links the project to your Expo account and writes
-     `extra.eas.projectId` into app.json (accept the defaults).
-  3. `npx eas-cli build --platform android --profile preview` — builds in the
-     cloud (free tier is fine; first build ~10–20 min). When it finishes, the
-     terminal prints a download link for the `.apk`; it's also on the build
-     page at expo.dev. Install it on the phone via the link/QR code or `adb
-     install <file>.apk`.
-  4. For a store-style build use `--profile production` (still an APK per
-     eas.json; change `buildType` to `"app-bundle"` only if you need an AAB
-     for Play Store upload).
-- If `eas init`/`eas build` asks to generate an Android keystore, say yes —
-  EAS stores it for you so later builds are signed consistently.
+- Local APK: **built 2026-09-11** — `iron-log.apk` at the project root
+  (gitignored via `*.apk`), 31.6 MiB, arm64-v8a, signed with the debug
+  keystore (fine for sideloading; generate a real keystore only if you ever
+  publish to the Play Store). Built with `scripts/build-apk.sh`, which needs
+  no Expo account. Rebuild after code changes with the same script: with the
+  native project and Gradle caches warm it's ~3-5 min (only the JS bundle and
+  packaging rerun); a cold Codespace is ~25-30 min plus a ~2.5 GB SDK download.
+- What the script does (so it can be redone by hand): installs Android
+  cmdline-tools + platform 36 / build-tools 36.0.0 / NDK 27.1.12297006 /
+  CMake 3.22.1 into `~/android-sdk` if missing; adds an 8 GB swapfile at
+  `/tmp/swapfile` (needs passwordless sudo, which Codespaces has); runs
+  `expo prebuild --platform android` if `android/` is missing (restoring
+  package.json afterwards because prebuild rewrites the `android`/`ios`
+  scripts); writes `android/local.properties`; patches
+  `android/gradle.properties` to `reactNativeArchitectures=arm64-v8a`,
+  `-Xmx1536m`, `org.gradle.parallel=false`, `org.gradle.workers.max=1`,
+  `kotlin.compiler.execution.strategy=in-process`; then runs
+  `:expo-modules-core:buildCMakeRelWithDebInfo[arm64-v8a]`,
+  `:app:buildCMakeRelWithDebInfo[arm64-v8a]` and `assembleRelease` as three
+  separate `--no-daemon` Gradle runs. JDK: sdkman's 21 (Gradle 9.3.1 + AGP
+  8.12 are fine with it; JDK 25 is also present but untested).
+- Why the staging/memory tweaks: the first plain `assembleRelease` on this
+  2-core / 8 GB Codespace died with "Gradle build daemon disappeared
+  unexpectedly" during the C++ compile (OOM-killed, no swap). Swap + the caps
+  + one JVM per heavy stage fixed it; stage times were 2 min / 4.5 min / 12 min.
+- Installing on the phone: get `iron-log.apk` onto the phone (the file is over
+  the 30 MiB chat-upload cap, so send it zipped — it compresses to ~16 MiB
+  because the .so files are stored uncompressed — or download it from the
+  Codespace file explorer), open it, allow installs from that source.
+  Re-installing a newer build over it keeps the SQLite data.
+- EAS (cloud) build: still an option and everything is configured for it
+  (`eas.json` `preview`/`production` profiles both produce an APK;
+  `app.json` has `android.package com.amirhusni.ironlog` and the config
+  plugins), but it requires an Expo login, so it was not run. Steps if wanted:
+  `npx eas-cli login` → `npx eas-cli init` → `npx eas-cli build --platform
+  android --profile preview`; say yes if it offers to generate a keystore.
