@@ -59,7 +59,7 @@ export function draftsToExercises(drafts: DraftExercise[]): Exercise[] {
       const sets: SetEntry[] = d.sets
         .filter((s) => s.weight.trim() !== '' || s.reps.trim() !== '')
         .map((s) => ({ weight: parseSetValue(s.weight), reps: parseSetValue(s.reps), rir: s.rir }));
-      const exercise: Exercise = { name: d.name.trim(), sets };
+      const exercise: Exercise = { name: d.name.trim().toUpperCase(), sets };
       if (d.hasBaseResistance) {
         exercise.hasBaseResistance = true;
         const br = Number(d.baseResistance);

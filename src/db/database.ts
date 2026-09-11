@@ -40,6 +40,9 @@ async function openAndMigrate(): Promise<SQLite.SQLiteDatabase> {
     CREATE INDEX IF NOT EXISTS idx_sessions_date ON sessions(date);
   `);
 
+  // Exercise names are stored uppercase; fold any rows written before that rule.
+  await db.runAsync(`UPDATE session_exercises SET name = UPPER(name) WHERE name <> UPPER(name)`);
+
   return db;
 }
 

@@ -22,9 +22,20 @@ Stack: Expo SDK 57 (React Native 0.86, React 19.2), TypeScript, React
 Navigation 7 (bottom tabs + native stack for History), expo-sqlite,
 expo-file-system (new `File`/`Paths` API) + expo-sharing + expo-document-picker,
 react-native-svg (hand-rolled line chart, no chart lib),
-@react-native-community/datetimepicker. Entry: `index.ts` → `App.tsx` (opens DB,
+@react-native-community/datetimepicker, @expo/vector-icons (Ionicons).
+Entry: `index.ts` → `App.tsx` (opens DB,
 then mounts `src/navigation/RootNavigator.tsx`). Code lives under `src/`
 (`db/`, `screens/`, `components/`, `navigation/`, `utils/`, `types/`).
+
+UI conventions (added 2026-09-11): dark theme with an orange accent, defined
+entirely in [src/theme.ts](src/theme.ts) (`colors`/`spacing`/`radius`/`fontSize`)
+— don't hardcode colours or font sizes in screens. Shared building blocks:
+[ScreenHeader](src/components/ScreenHeader.tsx) (eyebrow + big title + subtitle,
+used by every tab), [Card](src/components/Card.tsx) + `CardTitle` (bordered
+surface panel with an uppercase micro-label), [EmptyState](src/components/EmptyState.tsx),
+[Button](src/components/Button.tsx) (variants primary/secondary/danger/ghost/
+ghostDanger, optional Ionicon). Exercise names are stored and displayed
+UPPERCASE (see Storage).
 
 Run: `npx expo start` then open in Expo Go. Typecheck: `npx tsc --noEmit`.
 
@@ -50,7 +61,10 @@ Run: `npx expo start` then open in Expo Go. Typecheck: `npx tsc --noEmit`.
      shared [SessionEditor](src/components/SessionEditor.tsx) (date field, exercise
      autocomplete, per-exercise banded/base-resistance toggle, set rows with RIR
      tag; "Add set" copies the previous set's values; auto-fill takes the first
-     set of the most recent session by date for that name).
+     set of the most recent session by date for that name). The name field forces
+     uppercase as you type and there's a list button next to it that opens the
+     searchable [ExerciseSearchModal](src/components/ExerciseSearchModal.tsx)
+     (same one Progress uses) with an "Add ＜query＞" row for new names.
 
 2. **History**: list of past sessions (most recent first), tap to see full detail
    (exercises + sets for that day), with edit and delete.
@@ -62,10 +76,14 @@ Run: `npx expo start` then open in Expo Go. Typecheck: `npx tsc --noEmit`.
 
 3. **Progress**: pick an exercise, see a simple line/trend chart of its effective
    weight (or best set) over time.
-   - Status: done — [ProgressScreen.tsx](src/screens/ProgressScreen.tsx): exercise
-     chips (alphabetical, first auto-selected), SVG line chart
+   - Status: done — [ProgressScreen.tsx](src/screens/ProgressScreen.tsx): a tappable
+     selector row opens the searchable full-screen
+     [ExerciseSearchModal](src/components/ExerciseSearchModal.tsx) (replaced the old
+     horizontal chip strip, which didn't scale past a handful of exercises), then
+     Best/Latest/Sessions mini-stats, a gradient-filled SVG line chart
      ([LineChart.tsx](src/components/LineChart.tsx)) of best effective weight per
-     session, plus the per-session list underneath.
+     session with a session-over-session delta pill, and the per-session list
+     underneath showing each session's change.
 
 4. **Stats**: total sessions logged, distinct exercises tracked, sessions in the
    last 7 days, weeks since first session, most-trained exercise (by session count),
@@ -106,6 +124,14 @@ verify thoroughly before building screens on top of it.
   rir, position)`. weight/reps stored as TEXT to preserve the `number | string`
   data model, converted to number on read when the string is numeric. See
   [src/db/database.ts](src/db/database.ts) and [src/db/repository.ts](src/db/repository.ts).
+- Exercise names are normalised to UPPERCASE on write (`draftsToExercises` in
+  [sessionDraft.ts](src/utils/sessionDraft.ts), and on import in BackupScreen), and
+  `openAndMigrate` runs `UPDATE session_exercises SET name = UPPER(name) WHERE name
+  <> UPPER(name)` on every open to fold rows written before that rule. The
+  migration is idempotent and touches only the name column. All the lookup queries
+  were already `COLLATE NOCASE`, so this is cosmetic consistency rather than a
+  correctness fix — it stops the same lift appearing under two spellings in the
+  exercise list.
 - Status: done
 
 ## Possible additions (nice to have, don't block core functionality)
@@ -211,6 +237,35 @@ confirmed all 3 persisted correctly with exact same values.")
   installs as an update over itself and keeps data); `aapt dump badging` shows
   package `com.amirhusni.ironlog` 1.0.0, label "Iron Log", minSdk 24,
   targetSdk 36, native-code arm64-v8a only. Not yet run on a phone.
+
+- UI overhaul + uppercase names verified (2026-09-11): `npx tsc --noEmit` clean and
+  `npx expo export --platform android` bundled to a 2.8 MB Hermes bundle with exit 0
+  (confirms the new `@expo/vector-icons` import resolves). Logic verified against a
+  real SQLite engine via the better-sqlite3 shim, seeding a database the way the
+  *old* build wrote it (rows literally named "Bench Press", "bench press",
+  "Banded Pull-up") and then opening it through `getDb()`: all names came back
+  ["BANDED PULL-UP","BENCH PRESS"], every set value survived untouched
+  (60×8, 65×6 RIR, banded base −20 with 0×10), `getLastUseForExercise('bench press')`
+  still resolved to 62.5×8, `getProgressForExercise('BeNcH pReSs')` still merged both
+  original spellings into one 2-point series, a newly written session stored
+  "INCLINE DUMBBELL PRESS" uppercase and folded into the same BANDED PULL-UP series
+  as the old row, stats/PBs all reported uppercase names, and a second pass found 0
+  rows still needing folding (migration is idempotent). One assertion failed on the
+  first run and was my test's fault, not the app's: BENCH PRESS and BANDED PULL-UP
+  were tied at 2 sessions and the documented `name ASC` tie-break correctly picked
+  BANDED PULL-UP.
+
+- APK rebuild verified (2026-09-11, second build): `scripts/build-apk.sh` exit 0 in
+  ~9 min wall clock (stages 3m16s / 58s / 4m31s — slower than a pure-JS rebuild
+  because `@expo/vector-icons` pulls in `expo-font`, a native module that had to be
+  autolinked and compiled). `iron-log.apk` 34 MiB (was 32), `apksigner verify`
+  passes, badging still `com.amirhusni.ironlog` 1.0.0 arm64-v8a "Iron Log". Checked
+  the icon font actually ships: the APK contains 19 `.ttf` files under `res/` with
+  minified names (AAPT resource optimisation renames them, so grepping for
+  "Ionicons.ttf" finds nothing and is NOT evidence of a problem) — reading the
+  internal font names shows `res/CU.ttf => Ionicons`, and the JS bundle references
+  Ionicons. Delivered to the user zipped (19 MiB) because 34 MiB exceeds the 30 MiB
+  chat upload cap.
 
 ## Blockers / known issues
 

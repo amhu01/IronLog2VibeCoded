@@ -1,8 +1,8 @@
+import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { DarkTheme, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
-import { Text } from 'react-native';
 import { BackupScreen } from '../screens/BackupScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
 import { LogScreen } from '../screens/LogScreen';
@@ -20,7 +20,8 @@ function HistoryStackNavigator() {
     <HistoryStack.Navigator
       screenOptions={{
         headerStyle: { backgroundColor: colors.background },
-        headerTintColor: colors.text,
+        headerTintColor: colors.primary,
+        headerTitleStyle: { color: colors.text, fontWeight: '700' },
         headerShadowVisible: false,
         contentStyle: { backgroundColor: colors.background },
       }}
@@ -43,12 +44,14 @@ const theme = {
   },
 };
 
-const TAB_ICONS: Record<keyof RootTabParamList, string> = {
-  Log: '＋',
-  History: '≡',
-  Progress: '↗',
-  Stats: '★',
-  Backup: '⇅',
+type IconName = React.ComponentProps<typeof Ionicons>['name'];
+
+const TAB_ICONS: Record<keyof RootTabParamList, { active: IconName; inactive: IconName }> = {
+  Log: { active: 'add-circle', inactive: 'add-circle-outline' },
+  History: { active: 'time', inactive: 'time-outline' },
+  Progress: { active: 'trending-up', inactive: 'trending-up-outline' },
+  Stats: { active: 'stats-chart', inactive: 'stats-chart-outline' },
+  Backup: { active: 'cloud-upload', inactive: 'cloud-upload-outline' },
 };
 
 export function RootNavigator() {
@@ -58,10 +61,15 @@ export function RootNavigator() {
         screenOptions={({ route }) => ({
           headerShown: false,
           tabBarActiveTintColor: colors.primary,
-          tabBarInactiveTintColor: colors.textMuted,
-          tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 18, lineHeight: 22 }}>{TAB_ICONS[route.name]}</Text>
+          tabBarInactiveTintColor: colors.textFaint,
+          tabBarStyle: {
+            backgroundColor: colors.surface,
+            borderTopColor: colors.border,
+            borderTopWidth: 1,
+          },
+          tabBarLabelStyle: { fontSize: 11, fontWeight: '700' },
+          tabBarIcon: ({ color, focused, size }) => (
+            <Ionicons name={focused ? TAB_ICONS[route.name].active : TAB_ICONS[route.name].inactive} size={size} color={color} />
           ),
         })}
       >

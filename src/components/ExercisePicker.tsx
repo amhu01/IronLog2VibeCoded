@@ -1,6 +1,8 @@
+import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { colors, radius, spacing } from '../theme';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { colors, fontSize, radius, spacing } from '../theme';
+import { ExerciseSearchModal } from './ExerciseSearchModal';
 
 interface ExercisePickerProps {
   knownNames: string[];
@@ -10,6 +12,7 @@ interface ExercisePickerProps {
 export function ExercisePicker({ knownNames, onSubmit }: ExercisePickerProps) {
   const [text, setText] = useState('');
   const [focused, setFocused] = useState(false);
+  const [browsing, setBrowsing] = useState(false);
 
   const suggestions = useMemo(() => {
     const q = text.trim().toLowerCase();
@@ -18,85 +21,152 @@ export function ExercisePicker({ knownNames, onSubmit }: ExercisePickerProps) {
   }, [text, knownNames]);
 
   function submit(name: string) {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    onSubmit(trimmed);
+    const normalized = name.trim().toUpperCase();
+    if (!normalized) return;
+    onSubmit(normalized);
     setText('');
     setFocused(false);
   }
 
+  const hasText = text.trim() !== '';
+
   return (
     <View>
+      <Text style={styles.label}>ADD EXERCISE</Text>
       <View style={styles.row}>
-        <TextInput
-          style={styles.input}
-          placeholder="Exercise name (e.g. Bench Press)"
-          placeholderTextColor={colors.textMuted}
-          value={text}
-          onChangeText={setText}
-          onFocus={() => setFocused(true)}
-          onSubmitEditing={() => submit(text)}
-          returnKeyType="done"
-        />
-        <Pressable style={styles.addBtn} onPress={() => submit(text)}>
-          <Text style={styles.addBtnText}>Add</Text>
+        <View style={[styles.inputWrap, focused && styles.inputWrapFocused]}>
+          <Ionicons name="barbell-outline" size={18} color={focused ? colors.primary : colors.textMuted} />
+          <TextInput
+            style={styles.input}
+            placeholder="E.G. BENCH PRESS"
+            placeholderTextColor={colors.textFaint}
+            value={text}
+            onChangeText={(v) => setText(v.toUpperCase())}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            onSubmitEditing={() => submit(text)}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            returnKeyType="done"
+          />
+        </View>
+        <Pressable style={styles.iconBtn} onPress={() => setBrowsing(true)} hitSlop={4}>
+          <Ionicons name="list" size={22} color={colors.text} />
+        </Pressable>
+        <Pressable
+          style={[styles.addBtn, !hasText && styles.addBtnDisabled]}
+          onPress={() => submit(text)}
+          disabled={!hasText}
+          hitSlop={4}
+        >
+          <Ionicons name="add" size={24} color={colors.primaryText} />
         </Pressable>
       </View>
+
       {focused && suggestions.length > 0 && (
-        <FlatList
-          data={suggestions}
-          keyExtractor={(item) => item}
-          style={styles.suggestions}
-          keyboardShouldPersistTaps="handled"
-          renderItem={({ item }) => (
-            <Pressable style={styles.suggestionRow} onPress={() => submit(item)}>
+        <View style={styles.suggestions}>
+          {suggestions.map((item, i) => (
+            <Pressable
+              key={item}
+              style={[styles.suggestionRow, i === suggestions.length - 1 && styles.suggestionRowLast]}
+              onPress={() => submit(item)}
+            >
+              <Ionicons name="time-outline" size={16} color={colors.textFaint} />
               <Text style={styles.suggestionText}>{item}</Text>
             </Pressable>
-          )}
-        />
+          ))}
+        </View>
       )}
+
+      <ExerciseSearchModal
+        visible={browsing}
+        names={knownNames}
+        allowCreate
+        onClose={() => setBrowsing(false)}
+        onSelect={(name) => {
+          setBrowsing(false);
+          submit(name);
+        }}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  label: {
+    color: colors.textMuted,
+    fontSize: fontSize.tiny,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    marginBottom: spacing.sm,
+  },
   row: {
     flexDirection: 'row',
     gap: spacing.sm,
   },
+  inputWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.md,
+  },
+  inputWrapFocused: {
+    borderColor: colors.primary,
+  },
   input: {
     flex: 1,
-    backgroundColor: colors.surfaceAlt,
     color: colors.text,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
-    fontSize: 16,
+    fontSize: fontSize.body,
+    fontWeight: '600',
+    paddingVertical: 12,
   },
-  addBtn: {
-    backgroundColor: colors.primary,
+  iconBtn: {
+    width: 48,
     borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  addBtnText: {
-    color: colors.primaryText,
-    fontWeight: '600',
+  addBtn: {
+    width: 48,
+    borderRadius: radius.md,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addBtnDisabled: {
+    opacity: 0.4,
   },
   suggestions: {
-    marginTop: spacing.xs,
-    backgroundColor: colors.surfaceAlt,
+    marginTop: spacing.sm,
+    backgroundColor: colors.surface,
     borderRadius: radius.md,
-    maxHeight: 180,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
   },
   suggestionRow: {
-    paddingVertical: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: 12,
     paddingHorizontal: spacing.md,
     borderBottomColor: colors.border,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  suggestionRowLast: {
+    borderBottomWidth: 0,
+  },
   suggestionText: {
     color: colors.text,
-    fontSize: 15,
+    fontSize: fontSize.body,
+    fontWeight: '600',
   },
 });

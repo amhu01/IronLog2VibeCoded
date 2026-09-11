@@ -1,8 +1,10 @@
+import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
-import { colors, radius, spacing } from '../theme';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { colors, fontSize, radius, spacing } from '../theme';
 
-type Variant = 'primary' | 'secondary' | 'danger' | 'ghost';
+type Variant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'ghostDanger';
+type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
 interface ButtonProps {
   title: string;
@@ -10,9 +12,19 @@ interface ButtonProps {
   variant?: Variant;
   disabled?: boolean;
   loading?: boolean;
+  icon?: IconName;
 }
 
-export function Button({ title, onPress, variant = 'primary', disabled, loading }: ButtonProps) {
+const textColor: Record<Variant, string> = {
+  primary: colors.primaryText,
+  secondary: colors.text,
+  danger: '#ffffff',
+  ghost: colors.primary,
+  ghostDanger: colors.danger,
+};
+
+export function Button({ title, onPress, variant = 'primary', disabled, loading, icon }: ButtonProps) {
+  const color = textColor[variant];
   return (
     <Pressable
       onPress={onPress}
@@ -25,9 +37,12 @@ export function Button({ title, onPress, variant = 'primary', disabled, loading 
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'ghost' ? colors.primary : colors.primaryText} />
+        <ActivityIndicator color={color} />
       ) : (
-        <Text style={[styles.text, variant === 'ghost' && styles.ghostText]}>{title}</Text>
+        <View style={styles.content}>
+          {icon ? <Ionicons name={icon} size={18} color={color} /> : null}
+          <Text style={[styles.text, { color }]}>{title}</Text>
+        </View>
       )}
     </Pressable>
   );
@@ -35,31 +50,35 @@ export function Button({ title, onPress, variant = 'primary', disabled, loading 
 
 const styles = StyleSheet.create({
   base: {
-    paddingVertical: spacing.md,
+    paddingVertical: 14,
     paddingHorizontal: spacing.lg,
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 50,
+  },
+  content: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   pressed: {
-    opacity: 0.75,
+    opacity: 0.8,
+    transform: [{ scale: 0.985 }],
   },
   disabled: {
     opacity: 0.4,
   },
   text: {
-    color: colors.primaryText,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  ghostText: {
-    color: colors.primary,
+    fontSize: fontSize.h3,
+    fontWeight: '700',
   },
 });
 
 const variantStyles = StyleSheet.create({
   primary: { backgroundColor: colors.primary },
-  secondary: { backgroundColor: colors.surfaceAlt },
+  secondary: { backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border },
   danger: { backgroundColor: colors.danger },
   ghost: { backgroundColor: 'transparent' },
+  ghostDanger: { backgroundColor: 'transparent' },
 });

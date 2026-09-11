@@ -1,14 +1,25 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Card, CardTitle } from '../components/Card';
+import { EmptyState } from '../components/EmptyState';
+import { ScreenHeader } from '../components/ScreenHeader';
 import { getStats } from '../db/repository';
-import { colors, radius, spacing } from '../theme';
+import { colors, fontSize, radius, spacing } from '../theme';
 import type { StatsSummary } from '../types';
+import { formatDateDisplay } from '../utils/date';
+import { formatWeight } from '../utils/format';
 
-function StatTile({ label, value }: { label: string; value: string | number }) {
+type IconName = React.ComponentProps<typeof Ionicons>['name'];
+
+function StatTile({ label, value, icon }: { label: string; value: string | number; icon: IconName }) {
   return (
     <View style={styles.tile}>
+      <View style={styles.tileIcon}>
+        <Ionicons name={icon} size={16} color={colors.primary} />
+      </View>
       <Text style={styles.tileValue}>{value}</Text>
       <Text style={styles.tileLabel}>{label}</Text>
     </View>
@@ -26,40 +37,56 @@ export function StatsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <Text style={styles.title}>Stats</Text>
-      {stats && (
+      <ScreenHeader title="Stats" subtitle={stats && stats.totalSessions > 0 ? 'All time' : undefined} />
+      {stats && stats.totalSessions === 0 && (
+        <EmptyState icon="stats-chart-outline" title="No stats yet" body="Your numbers will appear after your first logged session." />
+      )}
+      {stats && stats.totalSessions > 0 && (
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.grid}>
-            <StatTile label="Total sessions" value={stats.totalSessions} />
-            <StatTile label="Exercises tracked" value={stats.distinctExercises} />
-            <StatTile label="Last 7 days" value={stats.sessionsLast7Days} />
-            <StatTile label="Weeks training" value={stats.weeksSinceFirstSession} />
+            <StatTile label="Sessions" value={stats.totalSessions} icon="calendar-outline" />
+            <StatTile label="Exercises" value={stats.distinctExercises} icon="barbell-outline" />
+            <StatTile label="Last 7 days" value={stats.sessionsLast7Days} icon="flame-outline" />
+            <StatTile label="Weeks training" value={stats.weeksSinceFirstSession} icon="time-outline" />
           </View>
 
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Most trained</Text>
-            <Text style={styles.cardBody}>
-              {stats.mostTrainedExercise
-                ? `${stats.mostTrainedExercise.name} — ${stats.mostTrainedExercise.sessionCount} session${stats.mostTrainedExercise.sessionCount === 1 ? '' : 's'}`
-                : 'No sessions yet'}
-            </Text>
-          </View>
+          <Card>
+            <CardTitle title="Most trained" />
+            {stats.mostTrainedExercise ? (
+              <View style={styles.mostRow}>
+                <View style={styles.trophy}>
+                  <Ionicons name="trophy" size={22} color={colors.primary} />
+                </View>
+                <View style={styles.mostText}>
+                  <Text style={styles.mostName}>{stats.mostTrainedExercise.name}</Text>
+                  <Text style={styles.mostMeta}>
+                    {stats.mostTrainedExercise.sessionCount} session{stats.mostTrainedExercise.sessionCount === 1 ? '' : 's'}
+                  </Text>
+                </View>
+              </View>
+            ) : (
+              <Text style={styles.cardBody}>No sessions yet</Text>
+            )}
+          </Card>
 
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Personal bests</Text>
+          <Card>
+            <CardTitle title="Personal bests" />
             {stats.personalBests.length === 0 && <Text style={styles.cardBody}>No sessions yet</Text>}
-            {stats.personalBests.map((pb) => (
-              <View key={pb.exerciseName} style={styles.pbRow}>
+            {stats.personalBests.map((pb, i) => (
+              <View key={pb.exerciseName} style={[styles.pbRow, i === stats.personalBests.length - 1 && styles.pbRowLast]}>
+                <View style={styles.pbIcon}>
+                  <Ionicons name="medal-outline" size={16} color={colors.success} />
+                </View>
                 <View style={styles.pbLeft}>
                   <Text style={styles.pbName}>{pb.exerciseName}</Text>
-                  <Text style={styles.pbDate}>{pb.date}</Text>
+                  <Text style={styles.pbDate}>{formatDateDisplay(pb.date)}</Text>
                 </View>
                 <Text style={styles.pbValue}>
-                  {pb.effectiveWeight} × {pb.reps}
+                  {formatWeight(pb.effectiveWeight)} × {pb.reps}
                 </Text>
               </View>
             ))}
-          </View>
+          </Card>
         </ScrollView>
       )}
     </SafeAreaView>
@@ -70,13 +97,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  title: {
-    color: colors.text,
-    fontSize: 24,
-    fontWeight: '700',
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
   },
   content: {
     padding: spacing.md,
@@ -89,62 +109,102 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   tile: {
-    flexBasis: '48%',
+    flexBasis: '47%',
     flexGrow: 1,
     backgroundColor: colors.surface,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
     padding: spacing.md,
+  },
+  tileIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: radius.sm,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
   },
   tileValue: {
     color: colors.text,
-    fontSize: 28,
-    fontWeight: '700',
+    fontSize: 30,
+    fontWeight: '800',
+    letterSpacing: -0.5,
   },
   tileLabel: {
     color: colors.textMuted,
-    fontSize: 13,
-    marginTop: 2,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  cardTitle: {
-    color: colors.text,
-    fontSize: 15,
+    fontSize: fontSize.tiny,
     fontWeight: '700',
-    marginBottom: spacing.sm,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginTop: 2,
   },
   cardBody: {
     color: colors.textMuted,
-    fontSize: 15,
+    fontSize: fontSize.body,
+  },
+  mostRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  trophy: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mostText: {
+    flex: 1,
+  },
+  mostName: {
+    color: colors.text,
+    fontSize: fontSize.h3,
+    fontWeight: '700',
+  },
+  mostMeta: {
+    color: colors.textMuted,
+    fontSize: fontSize.small,
+    marginTop: 2,
   },
   pbRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: spacing.sm,
+    gap: spacing.sm + 4,
+    paddingVertical: spacing.sm + 2,
     borderBottomColor: colors.border,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  pbRowLast: {
+    borderBottomWidth: 0,
+  },
+  pbIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.sm,
+    backgroundColor: colors.successSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   pbLeft: {
     flex: 1,
-    marginRight: spacing.sm,
   },
   pbName: {
     color: colors.text,
-    fontWeight: '600',
-    fontSize: 15,
+    fontWeight: '700',
+    fontSize: fontSize.body,
   },
   pbDate: {
     color: colors.textMuted,
-    fontSize: 12,
+    fontSize: fontSize.tiny,
+    marginTop: 1,
   },
   pbValue: {
     color: colors.success,
-    fontWeight: '700',
-    fontSize: 15,
+    fontWeight: '800',
+    fontSize: fontSize.body,
   },
 });

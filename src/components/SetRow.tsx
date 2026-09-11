@@ -1,6 +1,7 @@
+import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { colors, radius, spacing } from '../theme';
+import { colors, fontSize, radius, spacing } from '../theme';
 import type { DraftSet } from '../utils/sessionDraft';
 
 interface SetRowProps {
@@ -13,31 +14,36 @@ interface SetRowProps {
 export function SetRow({ index, set, onChange, onRemove }: SetRowProps) {
   return (
     <View style={styles.row}>
-      <Text style={styles.index}>{index + 1}</Text>
+      <View style={styles.indexBox}>
+        <Text style={styles.index}>{index + 1}</Text>
+      </View>
       <TextInput
         style={styles.input}
-        placeholder="Weight"
-        placeholderTextColor={colors.textMuted}
+        placeholder="0"
+        placeholderTextColor={colors.textFaint}
         keyboardType="numbers-and-punctuation"
         value={set.weight}
         onChangeText={(v) => onChange({ ...set, weight: v })}
+        selectTextOnFocus
       />
       <TextInput
         style={styles.input}
-        placeholder="Reps"
-        placeholderTextColor={colors.textMuted}
+        placeholder="0"
+        placeholderTextColor={colors.textFaint}
         keyboardType="numbers-and-punctuation"
         value={set.reps}
         onChangeText={(v) => onChange({ ...set, reps: v })}
+        selectTextOnFocus
       />
       <Pressable
         style={[styles.rirBtn, set.rir && styles.rirBtnActive]}
         onPress={() => onChange({ ...set, rir: !set.rir })}
+        hitSlop={4}
       >
         <Text style={[styles.rirText, set.rir && styles.rirTextActive]}>RIR</Text>
       </Pressable>
-      <Pressable style={styles.removeBtn} onPress={onRemove}>
-        <Text style={styles.removeText}>×</Text>
+      <Pressable style={styles.removeBtn} onPress={onRemove} hitSlop={6}>
+        <Ionicons name="close" size={18} color={colors.textMuted} />
       </Pressable>
     </View>
   );
@@ -47,49 +53,60 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
-    marginBottom: spacing.xs,
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  indexBox: {
+    width: 28,
+    height: 28,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   index: {
     color: colors.textMuted,
-    width: 18,
-    textAlign: 'center',
-    fontSize: 13,
+    fontSize: fontSize.small,
+    fontWeight: '700',
   },
   input: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.surfaceAlt,
     color: colors.text,
     borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-    fontSize: 15,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 10,
+    fontSize: fontSize.h3,
+    fontWeight: '700',
   },
   rirBtn: {
+    width: 44,
+    height: 40,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   rirBtnActive: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primarySoft,
     borderColor: colors.primary,
   },
   rirText: {
-    color: colors.textMuted,
-    fontSize: 12,
-    fontWeight: '600',
+    color: colors.textFaint,
+    fontSize: fontSize.tiny,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   rirTextActive: {
-    color: colors.primaryText,
+    color: colors.primary,
   },
   removeBtn: {
-    paddingHorizontal: spacing.xs,
-  },
-  removeText: {
-    color: colors.danger,
-    fontSize: 20,
-    lineHeight: 20,
+    width: 30,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

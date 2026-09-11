@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -5,12 +6,15 @@ import React, { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../components/Button';
+import { Card } from '../components/Card';
+import { ScreenHeader } from '../components/ScreenHeader';
 import { exportAllSessions, mergeData, replaceAllData } from '../db/repository';
-import { colors, radius, spacing } from '../theme';
+import { colors, fontSize, radius, spacing } from '../theme';
 import type { Exercise, Session, SetEntry } from '../types';
 import { todayString } from '../utils/date';
 
 type ImportedSession = Omit<Session, 'id'>;
+type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -40,7 +44,7 @@ function parseBackup(raw: unknown): ImportedSession[] {
         const reps = typeof o.reps === 'number' || typeof o.reps === 'string' ? o.reps : '';
         return { weight, reps, rir: !!o.rir };
       });
-      const ex: Exercise = { name: e.name.trim(), sets };
+      const ex: Exercise = { name: e.name.trim().toUpperCase(), sets };
       if (e.hasBaseResistance) {
         ex.hasBaseResistance = true;
         ex.baseResistance = typeof e.baseResistance === 'number' ? e.baseResistance : Number(e.baseResistance) || 0;
@@ -49,6 +53,14 @@ function parseBackup(raw: unknown): ImportedSession[] {
     });
     return { date: s.date, exercises };
   });
+}
+
+function SectionIcon({ name }: { name: IconName }) {
+  return (
+    <View style={styles.sectionIcon}>
+      <Ionicons name={name} size={20} color={colors.primary} />
+    </View>
+  );
 }
 
 export function BackupScreen() {
@@ -139,27 +151,42 @@ export function BackupScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <Text style={styles.title}>Backup</Text>
+      <ScreenHeader title="Backup" subtitle="Your data never leaves this phone unless you export it" />
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Export</Text>
-          <Text style={styles.cardBody}>
-            Saves all your sessions to a JSON file and opens the share sheet so you can send it to Drive, Files, or
-            anywhere else.
-          </Text>
-          <Button title="Export to JSON" onPress={handleExport} loading={exporting} />
-        </View>
+        {status && (
+          <View style={styles.statusPill}>
+            <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+            <Text style={styles.statusText}>{status}</Text>
+          </View>
+        )}
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Import / restore</Text>
-          <Text style={styles.cardBody}>
-            Pick a previously exported JSON file. You'll be asked whether to merge it into your existing data or replace
-            everything.
-          </Text>
-          <Button title="Import from JSON" variant="secondary" onPress={handleImport} loading={importing} />
-        </View>
+        <Card>
+          <View style={styles.cardHeader}>
+            <SectionIcon name="cloud-upload-outline" />
+            <View style={styles.cardHeaderText}>
+              <Text style={styles.cardTitle}>Export</Text>
+              <Text style={styles.cardBody}>
+                Saves every session to a JSON file and opens the share sheet so you can send it to Drive, Files, or
+                anywhere else.
+              </Text>
+            </View>
+          </View>
+          <Button title="Export to JSON" icon="share-outline" onPress={handleExport} loading={exporting} />
+        </Card>
 
-        {status && <Text style={styles.status}>{status}</Text>}
+        <Card>
+          <View style={styles.cardHeader}>
+            <SectionIcon name="cloud-download-outline" />
+            <View style={styles.cardHeaderText}>
+              <Text style={styles.cardTitle}>Import / restore</Text>
+              <Text style={styles.cardBody}>
+                Pick a previously exported JSON file. You'll be asked whether to merge it into your existing data or
+                replace everything.
+              </Text>
+            </View>
+          </View>
+          <Button title="Import from JSON" variant="secondary" icon="folder-open-outline" onPress={handleImport} loading={importing} />
+        </Card>
       </ScrollView>
     </SafeAreaView>
   );
@@ -170,38 +197,50 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  title: {
-    color: colors.text,
-    fontSize: 24,
-    fontWeight: '700',
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-  },
   content: {
     padding: spacing.md,
     paddingBottom: spacing.xl * 2,
   },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.md,
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.successSoft,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md,
     marginBottom: spacing.md,
+  },
+  statusText: {
+    color: colors.success,
+    fontSize: fontSize.small,
+    fontWeight: '700',
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  sectionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardHeaderText: {
+    flex: 1,
   },
   cardTitle: {
     color: colors.text,
-    fontSize: 16,
+    fontSize: fontSize.h3,
     fontWeight: '700',
     marginBottom: spacing.xs,
   },
   cardBody: {
     color: colors.textMuted,
-    fontSize: 14,
-    marginBottom: spacing.md,
-    lineHeight: 20,
-  },
-  status: {
-    color: colors.success,
-    paddingHorizontal: spacing.xs,
-    fontSize: 14,
+    fontSize: fontSize.small,
+    lineHeight: 19,
   },
 });

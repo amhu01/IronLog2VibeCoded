@@ -1,7 +1,8 @@
+import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { getLastUseForExercise } from '../db/repository';
-import { spacing } from '../theme';
+import { colors, fontSize, radius, spacing } from '../theme';
 import { draftsToExercises, makeDraftExercise, type DraftExercise } from '../utils/sessionDraft';
 import { Button } from './Button';
 import { DateField } from './DateField';
@@ -65,9 +66,17 @@ export function SessionEditor({
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <DateField date={date} onChange={setDate} />
 
-      {exercises.map((ex) => (
+      {exercises.length === 0 && (
+        <View style={styles.hint}>
+          <Ionicons name="arrow-down-circle-outline" size={20} color={colors.textFaint} />
+          <Text style={styles.hintText}>Add your first exercise below. Known exercises auto-fill your last weight and reps.</Text>
+        </View>
+      )}
+
+      {exercises.map((ex, i) => (
         <ExerciseCard
           key={ex.key}
+          index={i}
           exercise={ex}
           onChange={(updated) => updateExercise(ex.key, updated)}
           onRemove={() => removeExercise(ex.key)}
@@ -78,7 +87,7 @@ export function SessionEditor({
         <ExercisePicker knownNames={knownNames} onSubmit={handleAddExercise} />
       </View>
 
-      <Button title={saveLabel} onPress={handleSave} disabled={!canSave} loading={saving} />
+      <Button title={saveLabel} icon="checkmark" onPress={handleSave} disabled={!canSave} loading={saving} />
       {extraActions}
     </ScrollView>
   );
@@ -88,6 +97,24 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.md,
     paddingBottom: spacing.xl * 2,
+  },
+  hint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  hintText: {
+    flex: 1,
+    color: colors.textMuted,
+    fontSize: fontSize.small,
+    lineHeight: 18,
   },
   pickerWrap: {
     marginBottom: spacing.lg,
