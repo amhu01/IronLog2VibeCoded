@@ -341,6 +341,18 @@ confirmed all 3 persisted correctly with exact same values.")
   `icon.png`. `expo prebuild` re-run so the new launcher webp files landed in
   `android/app/src/main/res/mipmap-*` (md5 of `ic_launcher_foreground.webp`
   changed; `colors.xml` now carries `#0b0d12`).
+- v3 APK verified (2026-09-17): `assembleRelease` under JDK 21 exit 0 (430
+  tasks). `iron-log.apk` 34 MiB, `apksigner verify` → Verifies, badging
+  `com.amirhusni.ironlog` 1.0.0 arm64-v8a "Iron Log", `libexpo-sqlite.so` and
+  the 2.3 MB Hermes bundle present. Icon check done properly this time:
+  `aapt2 dump badging` names the launcher as an adaptive-icon XML
+  (`res/BW.xml` after minification); `aapt2 dump xmltree` gave its three layer
+  resource ids, `aapt2 dump resources` mapped them to webp files, and decoding
+  those with sharp showed background layers 100% dark (#0b0d12), foreground
+  layers ~69% orange pixels (the barbell; the lighter plate colour falls
+  outside the strict orange threshold) with 0% white, and monochrome layers
+  100% white — i.e. the new icon, not the Expo placeholder. Not yet seen on a
+  phone.
 
 ## Blockers / known issues
 
@@ -410,11 +422,17 @@ plan, or anything left unfinished, with reasoning.)
 
 ## Final build
 
-- Local APK: **built 2026-09-11** — `iron-log.apk` at the project root
-  (gitignored via `*.apk`), 31.6 MiB, arm64-v8a, signed with the debug
-  keystore (fine for sideloading; generate a real keystore only if you ever
-  publish to the Play Store). Built with `scripts/build-apk.sh`, which needs
-  no Expo account. Rebuild after code changes with the same script: with the
+- Local APK: **v3 built 2026-09-17** (previous builds 2026-09-11) —
+  `iron-log.apk` at the project root (gitignored via `*.apk`), 34 MiB,
+  arm64-v8a, signed with the debug keystore (fine for sideloading; generate a
+  real keystore only if you ever publish to the Play Store). Built with
+  `scripts/build-apk.sh`, which needs no Expo account. The v3 build was the
+  cold path (prebuild had wiped `android/`): stages 1m28s (expo-modules-core
+  CMake — fast because its outputs live under node_modules and survived) /
+  4m44s (:app CMake) / 9m36s (assembleRelease), after two script bugs were
+  found and fixed on the way (see Blockers: trailing newline, JDK 25). Because
+  `SendUserFile` was unavailable in that session, the user downloads
+  `iron-log.apk` from the Codespace file explorer (right-click → Download). Rebuild after code changes with the same script: with the
   native project and Gradle caches warm it's ~3-5 min (only the JS bundle and
   packaging rerun); a cold Codespace is ~25-30 min plus a ~2.5 GB SDK download.
 - What the script does (so it can be redone by hand): installs Android
