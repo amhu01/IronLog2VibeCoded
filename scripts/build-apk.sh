@@ -10,11 +10,15 @@ cd "$ROOT"
 
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/android-sdk}"
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
-if [ -z "${JAVA_HOME:-}" ]; then
-  JAVA_HOME="$(ls -d /usr/local/sdkman/candidates/java/21* 2>/dev/null | head -1 || true)"
-  export JAVA_HOME
+# Always prefer sdkman's JDK 21: the Codespace shell presets JAVA_HOME to sdkman's
+# "current" (JDK 25), and AGP's CMake configure step fails on JDK 24+'s
+# restricted-native-access warning.
+JDK21="$(ls -d /usr/local/sdkman/candidates/java/21* 2>/dev/null | head -1 || true)"
+if [ -n "$JDK21" ]; then
+  export JAVA_HOME="$JDK21"
 fi
 [ -n "${JAVA_HOME:-}" ] || { echo "Need a JDK 17-21 in JAVA_HOME"; exit 1; }
+echo "==> Using JDK at $JAVA_HOME"
 
 # --- one-time: Android SDK ---------------------------------------------------
 SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
@@ -51,6 +55,8 @@ fi
 echo "sdk.dir=$ANDROID_HOME" > android/local.properties
 
 GP=android/gradle.properties
+# prebuild writes the file without a trailing newline; appending would glue onto the last line
+[ -n "$(tail -c1 "$GP")" ] && echo >> "$GP"
 sed -i 's/^reactNativeArchitectures=.*/reactNativeArchitectures=arm64-v8a/' "$GP"
 sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx1536m -XX:MaxMetaspaceSize=512m/' "$GP"
 sed -i 's/^org.gradle.parallel=.*/org.gradle.parallel=false/' "$GP"

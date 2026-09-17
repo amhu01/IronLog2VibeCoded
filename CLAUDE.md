@@ -386,6 +386,22 @@ plan, or anything left unfinished, with reasoning.)
   JS/TS-only changes never re-run prebuild. `scripts/build-apk.sh` re-applies
   the `gradle.properties` memory tweaks with `sed` on every run, so a fresh
   `android/` is fine for it.
+- Fixed 2026-09-17: prebuild writes `gradle.properties` WITHOUT a trailing
+  newline, and the script's `echo 'org.gradle.workers.max=1' >> …` glued onto
+  the last line, producing `expo.inlineModules.watchedDirectories=[]org.gradle.workers.max=1`.
+  Gradle then failed at configuration time with the unhelpful "Process
+  'command 'node'' finished with non-zero exit value 1" — the real error (only
+  visible by running the node command by hand) was expo-modules-autolinking's
+  `JSON.parse` choking on `[]org.gradle…`. The script now appends a newline
+  first if the file doesn't end with one. If you ever see that Gradle message,
+  check `tail -c 200 android/gradle.properties | cat -A` before anything else.
+- Fixed 2026-09-17: the Codespace shell presets `JAVA_HOME` to sdkman's
+  `current` = JDK 25, and the script only filled in JDK 21 when `JAVA_HOME` was
+  unset — so Gradle ran on 25 and `:app:configureCMakeRelWithDebInfo` failed
+  with "WARNING: A restricted method in java.lang.System has been called" (the
+  JDK 24+ native-access warning, which AGP treats as a configure error). The
+  same stage passes on JDK 21. The script now always exports sdkman's JDK 21
+  when present and prints which JDK it's using.
 - `expo-splash-screen` is not installed (not pulled in by `expo` in this SDK
   setup), so the splash is just the dark `backgroundColor`; `assets/splash-icon.png`
   exists for whenever the plugin is added
