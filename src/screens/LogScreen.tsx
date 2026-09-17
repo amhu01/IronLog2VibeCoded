@@ -1,39 +1,78 @@
 import { Ionicons } from '@expo/vector-icons';
+import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from '@react-navigation/native';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { SessionEditor } from '../components/SessionEditor';
-import { createSession, getAllExerciseNames } from '../db/repository';
+import { createSession, findNewPRs, getAllMachines, getExerciseCatalog, getRecentSessionNames } from '../db/repository';
+import type { RootTabParamList } from '../navigation/types';
 import { colors, fontSize, radius, spacing } from '../theme';
+import type { Exercise, ExerciseCatalogEntry, SessionTemplate } from '../types';
 import { formatDateDisplay, todayString } from '../utils/date';
+import { formatWeight } from '../utils/format';
+import { exerciseToDraft } from '../utils/sessionDraft';
 
-export function LogScreen() {
-  const [knownNames, setKnownNames] = useState<string[]>([]);
+type Props = BottomTabScreenProps<RootTabParamList, 'Log'>;
+
+interface Toast {
+  text: string;
+  pr: boolean;
+}
+
+export function LogScreen({ route, navigation }: Props) {
+  const [catalog, setCatalog] = useState<ExerciseCatalogEntry[]>([]);
+  const [machines, setMachines] = useState<string[]>([]);
+  const [recentNames, setRecentNames] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [formKey, setFormKey] = useState(0);
-  const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [template, setTemplate] = useState<SessionTemplate | null>(null);
+  const [toast, setToast] = useState<Toast | null>(null);
 
-  useFocusEffect(
-    useCallback(() => {
-      getAllExerciseNames().then(setKnownNames).catch(() => {});
-    }, [])
-  );
+  const refresh = useCallback(() => {
+    Promise.all([getExerciseCatalog(), getAllMachines(), getRecentSessionNames()])
+      .then(([c, m, n]) => {
+        setCatalog(c);
+        setMachines(m);
+        setRecentNames(n);
+      })
+      .catch(() => {});
+  }, []);
 
-  async function handleSave(date: string, exercises: Parameters<typeof createSession>[1]) {
+  useFocusEffect(refresh);
+
+  const incoming = route.params?.template;
+  useEffect(() => {
+    if (!incoming) return;
+    setTemplate(incoming);
+    setFormKey((k) => k + 1);
+    navigation.setParams({ template: undefined });
+  }, [incoming, navigation]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const id = setTimeout(() => setToast(null), toast.pr ? 6000 : 2500);
+    return () => clearTimeout(id);
+  }, [toast]);
+
+  async function handleSave(date: string, name: string, exercises: Exercise[]) {
     if (exercises.length === 0) {
       Alert.alert('Nothing to save', 'Add at least one exercise with a set.');
       return;
     }
     setSaving(true);
     try {
-      await createSession(date, exercises);
-      setSavedMessage(`Saved session for ${formatDateDisplay(date)}`);
+      const prs = await findNewPRs(exercises);
+      await createSession(date, exercises, name);
+      const label = name ? `“${name}”` : 'session';
+      const prText = prs.length
+        ? ` · NEW PR: ${prs.map((p) => `${p.name}${p.machine ? ` (${p.machine})` : ''} ${formatWeight(p.effectiveWeight)}`).join(', ')}`
+        : '';
+      setToast({ text: `Saved ${label} for ${formatDateDisplay(date)}${prText}`, pr: prs.length > 0 });
+      setTemplate(null);
       setFormKey((k) => k + 1);
-      const names = await getAllExerciseNames();
-      setKnownNames(names);
-      setTimeout(() => setSavedMessage(null), 2500);
+      refresh();
     } catch (e) {
       Alert.alert('Failed to save', String(e));
     } finally {
@@ -43,20 +82,27 @@ export function LogScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScreenHeader title="Log" subtitle={formatDateDisplay(todayString())} />
-      {savedMessage && (
-        <View style={styles.toast}>
-          <Ionicons name="checkmark-circle" size={18} color={colors.success} />
-          <Text style={styles.toastText}>{savedMessage}</Text>
+      <ScreenHeader
+        title="Log"
+        subtitle={template ? `Repeating ${template.name ? `“${template.name}”` : 'a previous session'} — adjust and save` : formatDateDisplay(todayString())}
+      />
+      {toast && (
+        <View style={[styles.toast, toast.pr && styles.toastPr]}>
+          <Ionicons name={toast.pr ? 'trophy' : 'checkmark-circle'} size={18} color={toast.pr ? colors.primary : colors.success} />
+          <Text style={[styles.toastText, toast.pr && styles.toastTextPr]}>{toast.text}</Text>
         </View>
       )}
       <SessionEditor
         key={formKey}
         initialDate={todayString()}
-        initialExercises={[]}
-        knownNames={knownNames}
+        initialName={template?.name ?? ''}
+        initialExercises={template ? template.exercises.map(exerciseToDraft) : []}
+        catalog={catalog}
+        allMachines={machines}
+        recentNames={recentNames}
         saveLabel="Save session"
         saving={saving}
+        showRestTimer
         onSave={handleSave}
       />
     </SafeAreaView>
@@ -79,9 +125,16 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm + 2,
     paddingHorizontal: spacing.md,
   },
+  toastPr: {
+    backgroundColor: colors.primarySoft,
+  },
   toastText: {
+    flex: 1,
     color: colors.success,
     fontSize: fontSize.small,
     fontWeight: '700',
+  },
+  toastTextPr: {
+    color: colors.primary,
   },
 });

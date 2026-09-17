@@ -1,18 +1,28 @@
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
-import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { colors, fontSize, radius, spacing } from '../theme';
+import { MUSCLE_GROUPS } from '../types';
 import { makeDraftSet, type DraftExercise, type DraftSet } from '../utils/sessionDraft';
 import { SetRow } from './SetRow';
 
 interface ExerciseCardProps {
   index: number;
   exercise: DraftExercise;
+  machineSuggestions: string[];
   onChange: (exercise: DraftExercise) => void;
   onRemove: () => void;
+  onMachineCommit: (machine: string) => void;
 }
 
-export function ExerciseCard({ index, exercise, onChange, onRemove }: ExerciseCardProps) {
+export function ExerciseCard({ index, exercise, machineSuggestions, onChange, onRemove, onMachineCommit }: ExerciseCardProps) {
+  const [machineFocused, setMachineFocused] = useState(false);
+
+  const filteredMachines = useMemo(() => {
+    const q = exercise.machine.trim().toLowerCase();
+    return machineSuggestions.filter((m) => m.toLowerCase() !== q && (q === '' || m.toLowerCase().includes(q))).slice(0, 5);
+  }, [machineSuggestions, exercise.machine]);
+
   function updateSet(idx: number, set: DraftSet) {
     const sets = exercise.sets.slice();
     sets[idx] = set;
@@ -26,10 +36,13 @@ export function ExerciseCard({ index, exercise, onChange, onRemove }: ExerciseCa
 
   function addSet() {
     const last = exercise.sets[exercise.sets.length - 1];
-    onChange({
-      ...exercise,
-      sets: [...exercise.sets, makeDraftSet(last?.weight ?? '', last?.reps ?? '')],
-    });
+    onChange({ ...exercise, sets: [...exercise.sets, makeDraftSet(last?.weight ?? '', last?.reps ?? '')] });
+  }
+
+  function pickMachine(machine: string) {
+    onChange({ ...exercise, machine });
+    setMachineFocused(false);
+    onMachineCommit(machine);
   }
 
   return (
@@ -45,6 +58,61 @@ export function ExerciseCard({ index, exercise, onChange, onRemove }: ExerciseCa
           <Ionicons name="trash-outline" size={18} color={colors.danger} />
         </Pressable>
       </View>
+
+      <Text style={styles.fieldLabel}>MUSCLE GROUP</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} keyboardShouldPersistTaps="handled">
+        {MUSCLE_GROUPS.map((g) => {
+          const active = exercise.muscleGroup === g;
+          return (
+            <Pressable
+              key={g}
+              style={[styles.chip, active && styles.chipActive]}
+              onPress={() => onChange({ ...exercise, muscleGroup: active ? '' : g })}
+            >
+              <Text style={[styles.chipText, active && styles.chipTextActive]}>{g}</Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      <Text style={styles.fieldLabel}>MACHINE / BRAND (OPTIONAL)</Text>
+      <View style={[styles.machineWrap, machineFocused && styles.machineWrapFocused]}>
+        <Ionicons name="cog-outline" size={16} color={machineFocused ? colors.primary : colors.textFaint} />
+        <TextInput
+          style={styles.machineInput}
+          placeholder="E.G. HAMMER STRENGTH"
+          placeholderTextColor={colors.textFaint}
+          value={exercise.machine}
+          onChangeText={(v) => onChange({ ...exercise, machine: v.toUpperCase() })}
+          onFocus={() => setMachineFocused(true)}
+          onBlur={() => {
+            setTimeout(() => setMachineFocused(false), 150);
+            onMachineCommit(exercise.machine);
+          }}
+          onSubmitEditing={() => onMachineCommit(exercise.machine)}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          returnKeyType="done"
+        />
+        {exercise.machine !== '' && (
+          <Pressable onPress={() => pickMachine('')} hitSlop={8}>
+            <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+          </Pressable>
+        )}
+      </View>
+      {machineFocused && filteredMachines.length > 0 && (
+        <View style={styles.suggestions}>
+          {filteredMachines.map((m, i) => (
+            <Pressable
+              key={m}
+              style={[styles.suggestionRow, i === filteredMachines.length - 1 && styles.suggestionRowLast]}
+              onPress={() => pickMachine(m)}
+            >
+              <Text style={styles.suggestionText}>{m}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
 
       <View style={styles.bandedRow}>
         <View style={styles.bandedText}>
@@ -131,6 +199,82 @@ const styles = StyleSheet.create({
     backgroundColor: colors.dangerSoft,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  fieldLabel: {
+    color: colors.textFaint,
+    fontSize: fontSize.tiny,
+    fontWeight: '800',
+    letterSpacing: 1,
+    marginBottom: spacing.xs + 2,
+  },
+  chips: {
+    gap: spacing.xs,
+    paddingBottom: spacing.md,
+  },
+  chip: {
+    paddingHorizontal: spacing.sm + 4,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  chipActive: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
+  },
+  chipText: {
+    color: colors.textMuted,
+    fontSize: fontSize.tiny,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  chipTextActive: {
+    color: colors.primary,
+  },
+  machineWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.sm + 4,
+    marginBottom: spacing.md,
+  },
+  machineWrapFocused: {
+    borderColor: colors.primary,
+    marginBottom: spacing.xs,
+  },
+  machineInput: {
+    flex: 1,
+    color: colors.text,
+    fontSize: fontSize.small,
+    fontWeight: '700',
+    paddingVertical: 10,
+  },
+  suggestions: {
+    backgroundColor: colors.surfaceRaised,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+    marginBottom: spacing.md,
+  },
+  suggestionRow: {
+    paddingVertical: 10,
+    paddingHorizontal: spacing.sm + 4,
+    borderBottomColor: colors.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  suggestionRowLast: {
+    borderBottomWidth: 0,
+  },
+  suggestionText: {
+    color: colors.text,
+    fontSize: fontSize.small,
+    fontWeight: '600',
   },
   bandedRow: {
     flexDirection: 'row',

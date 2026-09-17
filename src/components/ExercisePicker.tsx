@@ -2,14 +2,15 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, fontSize, radius, spacing } from '../theme';
+import type { ExerciseCatalogEntry } from '../types';
 import { ExerciseSearchModal } from './ExerciseSearchModal';
 
 interface ExercisePickerProps {
-  knownNames: string[];
+  catalog: ExerciseCatalogEntry[];
   onSubmit: (name: string) => void;
 }
 
-export function ExercisePicker({ knownNames, onSubmit }: ExercisePickerProps) {
+export function ExercisePicker({ catalog, onSubmit }: ExercisePickerProps) {
   const [text, setText] = useState('');
   const [focused, setFocused] = useState(false);
   const [browsing, setBrowsing] = useState(false);
@@ -17,8 +18,8 @@ export function ExercisePicker({ knownNames, onSubmit }: ExercisePickerProps) {
   const suggestions = useMemo(() => {
     const q = text.trim().toLowerCase();
     if (!q) return [];
-    return knownNames.filter((n) => n.toLowerCase().includes(q)).slice(0, 6);
-  }, [text, knownNames]);
+    return catalog.filter((e) => e.name.toLowerCase().includes(q)).slice(0, 6);
+  }, [text, catalog]);
 
   function submit(name: string) {
     const normalized = name.trim().toUpperCase();
@@ -43,7 +44,7 @@ export function ExercisePicker({ knownNames, onSubmit }: ExercisePickerProps) {
             value={text}
             onChangeText={(v) => setText(v.toUpperCase())}
             onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
+            onBlur={() => setTimeout(() => setFocused(false), 150)}
             onSubmitEditing={() => submit(text)}
             autoCapitalize="characters"
             autoCorrect={false}
@@ -53,12 +54,7 @@ export function ExercisePicker({ knownNames, onSubmit }: ExercisePickerProps) {
         <Pressable style={styles.iconBtn} onPress={() => setBrowsing(true)} hitSlop={4}>
           <Ionicons name="list" size={22} color={colors.text} />
         </Pressable>
-        <Pressable
-          style={[styles.addBtn, !hasText && styles.addBtnDisabled]}
-          onPress={() => submit(text)}
-          disabled={!hasText}
-          hitSlop={4}
-        >
+        <Pressable style={[styles.addBtn, !hasText && styles.addBtnDisabled]} onPress={() => submit(text)} disabled={!hasText} hitSlop={4}>
           <Ionicons name="add" size={24} color={colors.primaryText} />
         </Pressable>
       </View>
@@ -67,12 +63,13 @@ export function ExercisePicker({ knownNames, onSubmit }: ExercisePickerProps) {
         <View style={styles.suggestions}>
           {suggestions.map((item, i) => (
             <Pressable
-              key={item}
+              key={item.name}
               style={[styles.suggestionRow, i === suggestions.length - 1 && styles.suggestionRowLast]}
-              onPress={() => submit(item)}
+              onPress={() => submit(item.name)}
             >
               <Ionicons name="time-outline" size={16} color={colors.textFaint} />
-              <Text style={styles.suggestionText}>{item}</Text>
+              <Text style={styles.suggestionText}>{item.name}</Text>
+              {item.muscleGroup ? <Text style={styles.suggestionSub}>{item.muscleGroup}</Text> : null}
             </Pressable>
           ))}
         </View>
@@ -80,7 +77,7 @@ export function ExercisePicker({ knownNames, onSubmit }: ExercisePickerProps) {
 
       <ExerciseSearchModal
         visible={browsing}
-        names={knownNames}
+        entries={catalog}
         allowCreate
         onClose={() => setBrowsing(false)}
         onSelect={(name) => {
@@ -165,8 +162,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
   },
   suggestionText: {
+    flex: 1,
     color: colors.text,
     fontSize: fontSize.body,
     fontWeight: '600',
+  },
+  suggestionSub: {
+    color: colors.textFaint,
+    fontSize: fontSize.tiny,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
 });

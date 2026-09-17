@@ -1,37 +1,54 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, fontSize, radius, spacing } from '../theme';
+import { MUSCLE_GROUPS } from '../types';
+
+export interface ExerciseSearchEntry {
+  name: string;
+  muscleGroup: string;
+}
 
 interface ExerciseSearchModalProps {
   visible: boolean;
-  names: string[];
+  entries: ExerciseSearchEntry[];
   selected?: string | null;
   allowCreate?: boolean;
   onSelect: (name: string) => void;
   onClose: () => void;
 }
 
-export function ExerciseSearchModal({ visible, names, selected, allowCreate, onSelect, onClose }: ExerciseSearchModalProps) {
+export function ExerciseSearchModal({ visible, entries, selected, allowCreate, onSelect, onClose }: ExerciseSearchModalProps) {
   const [query, setQuery] = useState('');
+  const [group, setGroup] = useState<string | null>(null);
 
   useEffect(() => {
-    if (visible) setQuery('');
+    if (visible) {
+      setQuery('');
+      setGroup(null);
+    }
   }, [visible]);
+
+  const groups = useMemo(() => {
+    const present = new Set(entries.map((e) => e.muscleGroup).filter(Boolean));
+    return MUSCLE_GROUPS.filter((g) => present.has(g));
+  }, [entries]);
 
   const q = query.trim();
   const filtered = useMemo(() => {
     const lower = q.toLowerCase();
-    return lower ? names.filter((n) => n.toLowerCase().includes(lower)) : names;
-  }, [names, q]);
+    return entries.filter(
+      (e) => (group === null || e.muscleGroup === group) && (lower === '' || e.name.toLowerCase().includes(lower))
+    );
+  }, [entries, q, group]);
 
-  const exactExists = q !== '' && names.some((n) => n.toLowerCase() === q.toLowerCase());
+  const exactExists = q !== '' && entries.some((e) => e.name.toLowerCase() === q.toLowerCase());
   const canCreate = !!allowCreate && q !== '' && !exactExists;
 
   function handleSubmit() {
     if (canCreate) onSelect(q);
-    else if (filtered.length === 1) onSelect(filtered[0]);
+    else if (filtered.length === 1) onSelect(filtered[0].name);
   }
 
   return (
@@ -64,13 +81,27 @@ export function ExerciseSearchModal({ visible, names, selected, allowCreate, onS
             </Pressable>
           )}
         </View>
+
+        {groups.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} keyboardShouldPersistTaps="handled">
+            <Pressable style={[styles.chip, group === null && styles.chipActive]} onPress={() => setGroup(null)}>
+              <Text style={[styles.chipText, group === null && styles.chipTextActive]}>ALL</Text>
+            </Pressable>
+            {groups.map((g) => (
+              <Pressable key={g} style={[styles.chip, group === g && styles.chipActive]} onPress={() => setGroup(group === g ? null : g)}>
+                <Text style={[styles.chipText, group === g && styles.chipTextActive]}>{g}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        )}
+
         <Text style={styles.count}>
-          {filtered.length} of {names.length} exercise{names.length === 1 ? '' : 's'}
+          {filtered.length} of {entries.length} exercise{entries.length === 1 ? '' : 's'}
         </Text>
 
         <FlatList
           data={filtered}
-          keyExtractor={(item) => item}
+          keyExtractor={(item) => item.name}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.list}
           ListHeaderComponent={
@@ -84,14 +115,17 @@ export function ExerciseSearchModal({ visible, names, selected, allowCreate, onS
           ListEmptyComponent={
             <View style={styles.empty}>
               <Ionicons name="barbell-outline" size={28} color={colors.textFaint} />
-              <Text style={styles.emptyText}>{names.length === 0 ? 'No exercises yet' : 'No matches'}</Text>
+              <Text style={styles.emptyText}>{entries.length === 0 ? 'No exercises yet' : 'No matches'}</Text>
             </View>
           }
           renderItem={({ item }) => {
-            const active = !!selected && selected.toLowerCase() === item.toLowerCase();
+            const active = !!selected && selected.toLowerCase() === item.name.toLowerCase();
             return (
-              <Pressable style={[styles.row, active && styles.rowActive]} onPress={() => onSelect(item)}>
-                <Text style={[styles.rowText, active && styles.rowTextActive]}>{item}</Text>
+              <Pressable style={[styles.row, active && styles.rowActive]} onPress={() => onSelect(item.name)}>
+                <View style={styles.rowText}>
+                  <Text style={[styles.rowName, active && styles.rowNameActive]}>{item.name}</Text>
+                  {item.muscleGroup ? <Text style={styles.rowSub}>{item.muscleGroup}</Text> : null}
+                </View>
                 {active && <Ionicons name="checkmark" size={20} color={colors.primary} />}
               </Pressable>
             );
@@ -145,6 +179,32 @@ const styles = StyleSheet.create({
     fontSize: fontSize.h3,
     paddingVertical: 12,
   },
+  chips: {
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+  },
+  chip: {
+    paddingHorizontal: spacing.sm + 4,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  chipActive: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
+  },
+  chipText: {
+    color: colors.textMuted,
+    fontSize: fontSize.tiny,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  chipTextActive: {
+    color: colors.primary,
+  },
   count: {
     color: colors.textFaint,
     fontSize: fontSize.tiny,
@@ -162,7 +222,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 14,
+    paddingVertical: 12,
     paddingHorizontal: spacing.md,
     borderRadius: radius.md,
     marginBottom: spacing.xs,
@@ -175,13 +235,22 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   rowText: {
+    flex: 1,
+  },
+  rowName: {
     color: colors.text,
     fontSize: fontSize.body,
     fontWeight: '600',
-    flex: 1,
   },
-  rowTextActive: {
+  rowNameActive: {
     color: colors.primary,
+  },
+  rowSub: {
+    color: colors.textFaint,
+    fontSize: fontSize.tiny,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginTop: 2,
   },
   createRow: {
     justifyContent: 'flex-start',

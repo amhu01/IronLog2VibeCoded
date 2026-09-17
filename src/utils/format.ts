@@ -11,6 +11,12 @@ export function formatDelta(n: number): string {
   return '±0';
 }
 
+export function formatVolume(v: number): string {
+  if (v >= 10000) return `${Math.round(v / 1000)}k`;
+  if (v >= 1000) return `${(v / 1000).toFixed(1).replace(/\.0$/, '')}k`;
+  return formatWeight(Math.round(v));
+}
+
 export function formatDateShort(date: string): string {
   return parseDateString(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }

@@ -45,13 +45,16 @@ function parseBackup(raw: unknown): ImportedSession[] {
         return { weight, reps, rir: !!o.rir };
       });
       const ex: Exercise = { name: e.name.trim().toUpperCase(), sets };
+      if (typeof e.muscleGroup === 'string' && e.muscleGroup.trim()) ex.muscleGroup = e.muscleGroup.trim().toUpperCase();
+      if (typeof e.machine === 'string' && e.machine.trim()) ex.machine = e.machine.trim().toUpperCase();
       if (e.hasBaseResistance) {
         ex.hasBaseResistance = true;
         ex.baseResistance = typeof e.baseResistance === 'number' ? e.baseResistance : Number(e.baseResistance) || 0;
       }
       return ex;
     });
-    return { date: s.date, exercises };
+    const name = typeof s.name === 'string' ? s.name.trim() : '';
+    return { date: s.date, name, exercises };
   });
 }
 

@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#0f1115",
+    "backgroundColor": "#0b0d12",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.amirhusni.ironlog"
@@ -14,7 +14,7 @@
     "android": {
       "package": "com.amirhusni.ironlog",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#0b0d12",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"

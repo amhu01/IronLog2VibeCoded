@@ -1,17 +1,26 @@
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useState } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { SessionEditor } from '../components/SessionEditor';
-import { deleteSession, getAllExerciseNames, getSessionDetail, updateSession } from '../db/repository';
-import type { HistoryStackParamList } from '../navigation/types';
+import {
+  deleteSession,
+  getAllMachines,
+  getExerciseCatalog,
+  getRecentSessionNames,
+  getSessionDetail,
+  updateSession,
+} from '../db/repository';
+import type { HistoryStackParamList, RootTabParamList } from '../navigation/types';
 import { colors, fontSize, radius, spacing } from '../theme';
-import type { Session } from '../types';
+import type { Exercise, ExerciseCatalogEntry, Session } from '../types';
 import { formatDateDisplay } from '../utils/date';
-import { formatWeight } from '../utils/format';
+import { formatVolume, formatWeight } from '../utils/format';
 import { exerciseToDraft } from '../utils/sessionDraft';
+import { countSets, sessionVolume, setEffectiveWeight } from '../utils/stats';
 
 type Props = NativeStackScreenProps<HistoryStackParamList, 'SessionDetail'>;
 
@@ -27,7 +36,9 @@ export function SessionDetailScreen({ route, navigation }: Props) {
   const { sessionId } = route.params;
   const [session, setSession] = useState<Session | null>(null);
   const [editing, setEditing] = useState(false);
-  const [knownNames, setKnownNames] = useState<string[]>([]);
+  const [catalog, setCatalog] = useState<ExerciseCatalogEntry[]>([]);
+  const [machines, setMachines] = useState<string[]>([]);
+  const [recentNames, setRecentNames] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(() => {
@@ -37,7 +48,9 @@ export function SessionDetailScreen({ route, navigation }: Props) {
   useFocusEffect(
     useCallback(() => {
       load();
-      getAllExerciseNames().then(setKnownNames);
+      getExerciseCatalog().then(setCatalog);
+      getAllMachines().then(setMachines);
+      getRecentSessionNames().then(setRecentNames);
     }, [load])
   );
 
@@ -55,10 +68,17 @@ export function SessionDetailScreen({ route, navigation }: Props) {
     ]);
   }
 
-  async function handleSave(date: string, exercises: Session['exercises']) {
+  function handleRepeat() {
+    if (!session) return;
+    navigation
+      .getParent<BottomTabNavigationProp<RootTabParamList>>()
+      ?.navigate('Log', { template: { name: session.name ?? '', exercises: session.exercises } });
+  }
+
+  async function handleSave(date: string, name: string, exercises: Exercise[]) {
     setSaving(true);
     try {
-      await updateSession(sessionId, date, exercises);
+      await updateSession(sessionId, date, exercises, name);
       setEditing(false);
       load();
     } catch (e) {
@@ -81,8 +101,11 @@ export function SessionDetailScreen({ route, navigation }: Props) {
       <View style={styles.container}>
         <SessionEditor
           initialDate={session.date}
+          initialName={session.name ?? ''}
           initialExercises={session.exercises.map(exerciseToDraft)}
-          knownNames={knownNames}
+          catalog={catalog}
+          allMachines={machines}
+          recentNames={recentNames}
           saveLabel="Save changes"
           saving={saving}
           onSave={handleSave}
@@ -96,16 +119,26 @@ export function SessionDetailScreen({ route, navigation }: Props) {
     );
   }
 
-  const totalSets = session.exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
+  const totalSets = countSets(session.exercises);
+  const volume = sessionVolume(session.exercises);
+  const metaParts = [
+    `${session.exercises.length} exercise${session.exercises.length === 1 ? '' : 's'}`,
+    `${totalSets} set${totalSets === 1 ? '' : 's'}`,
+  ];
+  if (volume > 0) metaParts.push(`${formatVolume(volume)} volume`);
 
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.date}>{formatDateDisplay(session.date)}</Text>
-        <Text style={styles.meta}>
-          {session.exercises.length} exercise{session.exercises.length === 1 ? '' : 's'} · {totalSets} set
-          {totalSets === 1 ? '' : 's'}
-        </Text>
+        {session.name ? (
+          <>
+            <Text style={styles.title}>{session.name}</Text>
+            <Text style={styles.date}>{formatDateDisplay(session.date)}</Text>
+          </>
+        ) : (
+          <Text style={styles.title}>{formatDateDisplay(session.date)}</Text>
+        )}
+        <Text style={styles.meta}>{metaParts.join(' · ')}</Text>
 
         {session.exercises.map((ex, i) => (
           <Card key={i}>
@@ -116,10 +149,16 @@ export function SessionDetailScreen({ route, navigation }: Props) {
               <Text style={styles.exName} numberOfLines={2}>
                 {ex.name}
               </Text>
-              {ex.hasBaseResistance && <Tag text={`base ${formatWeight(ex.baseResistance ?? 0)}`} />}
             </View>
+            {(ex.muscleGroup || ex.machine || ex.hasBaseResistance) && (
+              <View style={styles.exTags}>
+                {ex.muscleGroup ? <Tag text={ex.muscleGroup} accent /> : null}
+                {ex.machine ? <Tag text={ex.machine} /> : null}
+                {ex.hasBaseResistance ? <Tag text={`base ${formatWeight(ex.baseResistance ?? 0)}`} /> : null}
+              </View>
+            )}
             {ex.sets.map((s, j) => {
-              const effective = ex.hasBaseResistance ? (ex.baseResistance ?? 0) + (Number(s.weight) || 0) : null;
+              const effective = ex.hasBaseResistance ? setEffectiveWeight(ex, s.weight) : null;
               return (
                 <View key={j} style={[styles.setRow, j === ex.sets.length - 1 && styles.setRowLast]}>
                   <Text style={styles.setIndex}>SET {j + 1}</Text>
@@ -137,8 +176,10 @@ export function SessionDetailScreen({ route, navigation }: Props) {
         ))}
 
         <View style={styles.actions}>
+          <Button title="Repeat this session" variant="secondary" icon="repeat" onPress={handleRepeat} />
+          <View style={styles.gap} />
           <Button title="Edit session" icon="create-outline" onPress={() => setEditing(true)} />
-          <View style={{ height: spacing.sm }} />
+          <View style={styles.gap} />
           <Button title="Delete session" variant="ghostDanger" icon="trash-outline" onPress={handleDelete} />
         </View>
       </ScrollView>
@@ -159,14 +200,19 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     paddingBottom: spacing.xl * 2,
   },
-  date: {
+  title: {
     color: colors.text,
     fontSize: 24,
     fontWeight: '800',
     letterSpacing: -0.3,
   },
-  meta: {
+  date: {
     color: colors.textMuted,
+    fontSize: fontSize.body,
+    marginTop: 2,
+  },
+  meta: {
+    color: colors.textFaint,
     fontSize: fontSize.small,
     marginTop: 2,
     marginBottom: spacing.md,
@@ -195,6 +241,12 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: fontSize.h3,
     fontWeight: '700',
+  },
+  exTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
   },
   setRow: {
     flexDirection: 'row',
@@ -243,6 +295,9 @@ const styles = StyleSheet.create({
   },
   actions: {
     marginTop: spacing.sm,
+  },
+  gap: {
+    height: spacing.sm,
   },
   cancelWrap: {
     marginTop: spacing.sm,

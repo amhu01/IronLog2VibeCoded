@@ -9,7 +9,7 @@ import { ScreenHeader } from '../components/ScreenHeader';
 import { getSessionsList, type SessionListItem } from '../db/repository';
 import type { HistoryStackParamList } from '../navigation/types';
 import { colors, fontSize, radius, spacing } from '../theme';
-import { formatDateParts } from '../utils/format';
+import { formatDateParts, formatVolume } from '../utils/format';
 
 type Props = NativeStackScreenProps<HistoryStackParamList, 'HistoryList'>;
 
@@ -41,7 +41,8 @@ export function HistoryScreen({ navigation }: Props) {
         contentContainerStyle={styles.list}
         renderItem={({ item }) => {
           const { day, month, weekday } = formatDateParts(item.date);
-          const count = item.exerciseNames.length;
+          const exercisesLine = item.exerciseNames.join(' · ') || 'No exercises';
+          const meta = [weekday, item.muscleGroups.length ? item.muscleGroups.join(', ') : `${item.exerciseNames.length} exercise${item.exerciseNames.length === 1 ? '' : 's'}`];
           return (
             <Pressable
               style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
@@ -52,14 +53,23 @@ export function HistoryScreen({ navigation }: Props) {
                 <Text style={styles.month}>{month}</Text>
               </View>
               <View style={styles.body}>
-                <Text style={styles.weekday}>
-                  {weekday} · {count} exercise{count === 1 ? '' : 's'}
+                <Text style={styles.meta} numberOfLines={1}>
+                  {meta.join(' · ')}
                 </Text>
-                <Text style={styles.exercises} numberOfLines={2}>
-                  {item.exerciseNames.join(' · ') || 'No exercises'}
+                <Text style={styles.title} numberOfLines={item.name ? 1 : 2}>
+                  {item.name || exercisesLine}
                 </Text>
+                {item.name ? (
+                  <Text style={styles.exercises} numberOfLines={1}>
+                    {exercisesLine}
+                  </Text>
+                ) : null}
               </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+              <View style={styles.right}>
+                <Text style={styles.stat}>{item.setCount} sets</Text>
+                {item.volume > 0 && <Text style={styles.statMuted}>{formatVolume(item.volume)} vol</Text>}
+                <Ionicons name="chevron-forward" size={16} color={colors.textFaint} style={styles.chevron} />
+              </View>
             </Pressable>
           );
         }}
@@ -114,7 +124,7 @@ const styles = StyleSheet.create({
   body: {
     flex: 1,
   },
-  weekday: {
+  meta: {
     color: colors.textMuted,
     fontSize: fontSize.tiny,
     fontWeight: '700',
@@ -122,10 +132,32 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: 3,
   },
-  exercises: {
+  title: {
     color: colors.text,
     fontSize: fontSize.body,
-    fontWeight: '600',
+    fontWeight: '700',
     lineHeight: 20,
+  },
+  exercises: {
+    color: colors.textMuted,
+    fontSize: fontSize.small,
+    marginTop: 2,
+  },
+  right: {
+    alignItems: 'flex-end',
+    gap: 2,
+  },
+  stat: {
+    color: colors.text,
+    fontSize: fontSize.small,
+    fontWeight: '700',
+  },
+  statMuted: {
+    color: colors.textFaint,
+    fontSize: fontSize.tiny,
+    fontWeight: '700',
+  },
+  chevron: {
+    marginTop: 2,
   },
 });

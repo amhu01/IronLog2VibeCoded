@@ -12,8 +12,14 @@ UI/UX can be modernized rather than copied 1:1.
 Core app complete and verified (2026-09-11): storage, all five screens, and the
 end-to-end Log → History → Progress → Stats flow are implemented and exercised
 (see Verification log). An installable release APK has been built locally
-(no EAS/Expo account) via `scripts/build-apk.sh` — see Final build. Next step
-is the user's on-device test. This file is the source of truth
+(no EAS/Expo account) via `scripts/build-apk.sh` — see Final build.
+v3 (2026-09-17) added, at the user's request after on-device use: a real app
+icon, optional session names, a muscle group per exercise, an optional
+machine/brand per exercise (the user trains on machines whose resistance
+scales differ, so weights are only comparable on the same machine — this
+drives per-machine auto-fill, Progress filtering and PBs), plus QoL: rest
+timer, session volume, "NEW PR" in the save toast, and "Repeat this session".
+This file is the source of truth
 for plan, progress, decisions, and blockers — update it continuously as work
 happens. If a session ends (out of context/tokens) or a different model picks
 this up, read this file first before doing anything else.
@@ -65,6 +71,24 @@ Run: `npx expo start` then open in Expo Go. Typecheck: `npx tsc --noEmit`.
      uppercase as you type and there's a list button next to it that opens the
      searchable [ExerciseSearchModal](src/components/ExerciseSearchModal.tsx)
      (same one Progress uses) with an "Add ＜query＞" row for new names.
+     v3: optional session name field at the top (recent names offered as
+     tap-to-reuse chips via `getRecentSessionNames`); each
+     [ExerciseCard](src/components/ExerciseCard.tsx) has a MUSCLE GROUP chip row
+     (fixed list `MUSCLE_GROUPS` in [types](src/types/index.ts)) and a
+     MACHINE / BRAND text field with suggestions (machines previously used for
+     that exercise first, then all machines). Adding a known exercise pre-fills
+     muscle group + machine + last set from its most recent use; changing the
+     machine re-fills the first set from the last session *on that machine*
+     (only while the exercise still has a single set, so it never clobbers
+     typed data) — `getLastUseForExercise(name, machine)` is strict when a
+     machine is passed. [RestTimer](src/components/RestTimer.tsx) sits under the
+     date (60/90/120 s presets, +30 s, stop, progress bar, vibrates when done —
+     `VIBRATE` permission is in the manifest by default). Save runs
+     `findNewPRs` *before* inserting and the toast says e.g. "NEW PR: LAT
+     PULLDOWN (HAMMER STRENGTH) 70" (compared against the best on the same
+     machine; a first-ever use of a machine is not a PR). The tab accepts a
+     `template` route param (from History → "Repeat this session") that
+     pre-fills name + exercises and is cleared with `setParams` once consumed.
 
 2. **History**: list of past sessions (most recent first), tap to see full detail
    (exercises + sets for that day), with edit and delete.
@@ -72,7 +96,12 @@ Run: `npx expo start` then open in Expo Go. Typecheck: `npx tsc --noEmit`.
      first) → [SessionDetailScreen.tsx](src/screens/SessionDetailScreen.tsx) (read
      view showing effective weight for banded sets; Edit reuses SessionEditor;
      Delete confirms via Alert). Pressing the History tab while in a detail pops
-     back to the list.
+     back to the list. v3: list rows show the session name as the title (falling
+     back to the exercise list), the muscle groups hit, set count and volume
+     (`getSessionsList` aggregates in three queries, not N+1); detail shows
+     name/date, "N exercises · N sets · Nk volume", muscle-group/machine/base
+     tags per exercise, and a "Repeat this session" button that navigates to
+     the Log tab with the session as a template.
 
 3. **Progress**: pick an exercise, see a simple line/trend chart of its effective
    weight (or best set) over time.
@@ -83,7 +112,12 @@ Run: `npx expo start` then open in Expo Go. Typecheck: `npx tsc --noEmit`.
      Best/Latest/Sessions mini-stats, a gradient-filled SVG line chart
      ([LineChart.tsx](src/components/LineChart.tsx)) of best effective weight per
      session with a session-over-session delta pill, and the per-session list
-     underneath showing each session's change.
+     underneath showing each session's change. v3: when an exercise has been
+     done on more than one machine, a MACHINE chip row (ALL / each machine /
+     NO MACHINE) filters everything below it — the filter is client-side over
+     `getProgressForExercise`, which now returns `machine` and `sessionName`
+     per point. The search modal shows each exercise's muscle group and has
+     group filter chips.
 
 4. **Stats**: total sessions logged, distinct exercises tracked, sessions in the
    last 7 days, weeks since first session, most-trained exercise (by session count),
@@ -91,6 +125,10 @@ Run: `npx expo start` then open in Expo Go. Typecheck: `npx tsc --noEmit`.
    - Status: done — [StatsScreen.tsx](src/screens/StatsScreen.tsx); all numbers come
      from `getStats()` in the repository (PB = highest effective weight, ties keep
      the earliest date; "last 7 days" = today and the 6 days before it, local dates).
+     v3: PBs are per (exercise, machine) — the same lift on two machines is two
+     rows, the machine shown under the name — and a "Sets by muscle group" card
+     with a 7 DAYS / ALL toggle draws bars from `setsByMuscleGroup*` (untagged
+     sets counted separately).
 
 5. **Backup**: export all data to a JSON file using the device's real share/save
    sheet (expo-file-system + expo-sharing — NOT a browser-style forced download,
@@ -102,7 +140,9 @@ Run: `npx expo start` then open in Expo Go. Typecheck: `npx tsc --noEmit`.
      to the cache dir via the new expo-file-system `File` API and hands it to
      `Sharing.shareAsync` (real OS share/save sheet). Import uses
      expo-document-picker, validates the shape (also accepts `{ sessions: [...] }`
-     for old-app exports), then asks Merge / Replace all via Alert.
+     for old-app exports), then asks Merge / Replace all via Alert. v3: the file
+     also carries `name` per session and `muscleGroup` / `machine` per exercise
+     (all optional on import, uppercased like the DB).
 
 ## Storage
 
@@ -118,10 +158,15 @@ verify thoroughly before building screens on top of it.
   distinct-exercise counts) that would mean loading and scanning the entire
   dataset into memory on every screen with AsyncStorage. SQLite gives indexed
   queries for these directly and is the more robust choice for surviving app
-  updates reliably (the stated #1 pain point). Schema: `sessions(id, date)`,
-  `session_exercises(id, session_id, name, has_base_resistance,
-  base_resistance, position)`, `sets(id, session_exercise_id, weight, reps,
-  rir, position)`. weight/reps stored as TEXT to preserve the `number | string`
+  updates reliably (the stated #1 pain point). Schema: `sessions(id, date,
+  name)`, `session_exercises(id, session_id, name, muscle_group, machine,
+  has_base_resistance, base_resistance, position)`, `sets(id,
+  session_exercise_id, weight, reps, rir, position)`. `name` / `muscle_group` /
+  `machine` were added in v3 as `TEXT NOT NULL DEFAULT ''` via
+  `addColumnIfMissing` (checks `PRAGMA table_info` then `ALTER TABLE ADD
+  COLUMN`) so databases from earlier builds upgrade in place — keep every
+  future schema change additive like this; never drop/recreate tables. Blank
+  string means "not set". weight/reps stored as TEXT to preserve the `number | string`
   data model, converted to number on read when the string is numeric. See
   [src/db/database.ts](src/db/database.ts) and [src/db/repository.ts](src/db/repository.ts).
 - Exercise names are normalised to UPPERCASE on write (`draftsToExercises` in
@@ -136,11 +181,15 @@ verify thoroughly before building screens on top of it.
 
 ## Possible additions (nice to have, don't block core functionality)
 
-- Rest timer between sets (60/90/120s presets)
+- ~~Rest timer between sets (60/90/120s presets)~~ done in v3
 - Bodyweight tracking with its own trend chart
-- Workout templates (save an exercise list as a reusable routine)
-- Total volume (sets × reps × weight) per session/week
-- A small "New PR" toast when a logged set beats the stored all-time best
+- Workout templates (save an exercise list as a reusable routine) — partly
+  covered by "Repeat this session" from History (v3); a named, editable
+  routine library is still open
+- ~~Total volume (sets × reps × weight) per session~~ done in v3 (per week
+  still open)
+- ~~A small "New PR" toast when a logged set beats the stored all-time best~~
+  done in v3 (per machine)
 
 ## Constraints
 
@@ -266,6 +315,32 @@ confirmed all 3 persisted correctly with exact same values.")
   internal font names shows `res/CU.ttf => Ionicons`, and the JS bundle references
   Ionicons. Delivered to the user zipped (19 MiB) because 34 MiB exceeds the 30 MiB
   chat upload cap.
+- v3 features verified (2026-09-17): `npx tsc --noEmit` clean. Same
+  better-sqlite3 shim harness (rebuilt in the scratchpad; an earlier attempt
+  accidentally wrote `verify3.js` + `compiled/` into the project root because
+  the scratch dir had been cleaned — moved out, nothing committed). 23 checks
+  against a database seeded with the *v2 installed build's* schema (no name/
+  muscle_group/machine columns): opening it added the three columns, old
+  sessions read back with blank name/tags and identical sets (60×10, 65×8 RIR,
+  banded −20 with 0×10); `draftsToExercises` uppercases muscle group + machine
+  and omits blank ones; `createSession(date, exercises, '  Pull Day ')` stores
+  the trimmed name and tags; `getExerciseCatalog` returns the newest muscle
+  group and the machine list per exercise; `getLastUseForExercise('lat
+  pulldown')` picks the newest use (HAMMER STRENGTH 70×10), with `''` picks the
+  no-machine 62.5×10, with an unknown machine returns null; progress points
+  carry machine + session name; `findNewPRs` flagged 66 on no-machine (beats
+  65) and banded −10 (beats −20) but NOT 69 on HAMMER STRENGTH (below 70) nor a
+  first-ever use on TECHNOGYM; PBs came out split per machine; muscle split
+  counted 4 untagged + 2 BACK; the History aggregate matched hand-computed set
+  counts and volumes (e.g. 70×10 + 55×12 = 1360); export → replaceAllData →
+  export was byte-identical; updateSession with a name round-trips; a second
+  open (fresh require) is a no-op.
+- App icon generated (2026-09-17): SVG barbell rasterised with `sharp` in the
+  scratchpad into all six `assets/*.png` (icon 1024², adaptive
+  foreground/background/monochrome, splash, favicon). Visually checked
+  `icon.png`. `expo prebuild` re-run so the new launcher webp files landed in
+  `android/app/src/main/res/mipmap-*` (md5 of `ic_launcher_foreground.webp`
+  changed; `colors.xml` now carries `#0b0d12`).
 
 ## Blockers / known issues
 
@@ -302,6 +377,20 @@ plan, or anything left unfinished, with reasoning.)
   to avoid third-party compatibility risk on the very new RN 0.86 / React 19.
 - The Android package id / iOS bundle id are set to `com.amirhusni.ironlog` in
   app.json (required by EAS). Change before publishing if you want a different id.
+- `CI=1 npx expo prebuild --platform android --no-install` over an EXISTING
+  `android/` dir does NOT merge — it printed "Clearing android" and recreated
+  the folder from scratch (learned 2026-09-17 while refreshing the icon), which
+  throws away the CMake/Gradle build outputs and forces the full ~20-min native
+  build. That's the only way to get new icons/splash/app.json config into the
+  native project, so budget for it when assets or `app.json` change; for
+  JS/TS-only changes never re-run prebuild. `scripts/build-apk.sh` re-applies
+  the `gradle.properties` memory tweaks with `sed` on every run, so a fresh
+  `android/` is fine for it.
+- `expo-splash-screen` is not installed (not pulled in by `expo` in this SDK
+  setup), so the splash is just the dark `backgroundColor`; `assets/splash-icon.png`
+  exists for whenever the plugin is added
+  (`npx expo install expo-splash-screen`, then a `["expo-splash-screen", {...}]`
+  entry in app.json plugins, then prebuild).
 
 ## Final build
 
