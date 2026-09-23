@@ -441,6 +441,19 @@ confirmed all 3 persisted correctly with exact same values.")
   43-char name) stayed inside the card, dropped the 6th pill and showed
   "+ 2 more exercises".
 
+- v4 APK verified (2026-09-23): `scripts/build-apk.sh` exit 0, stages 1m54s /
+  52s / 2m07s (~5 min total — JS-only change, native fully cached, no prebuild).
+  34 MiB, `apksigner verify` → Verifies, badging `com.amirhusni.ironlog` 1.0.0
+  arm64-v8a "Iron Log". Confirmed the shipped Hermes bundle really contains the
+  new code rather than a stale one: "Shareable card", "Summary & share",
+  "VOLUME KG", "NEW PRS", "Repeat this session", "MUSCLE GROUP", "WS", "PANEL",
+  "CLEAR" and both scrim hint strings all present, and the old exact "RIR"
+  label is gone. Two gotchas when grepping a release bundle: `strings` skips
+  runs shorter than 4 chars (so a 2-char label like "WS" needs `-n 2`), and
+  Hermes stores any string containing non-ASCII as UTF-16 (so a line with an em
+  dash needs `strings -e l`). Both initially looked like missing features and
+  were not.
+
 ## Blockers / known issues
 
 (Document anything infeasible, any fallback taken instead of the original
