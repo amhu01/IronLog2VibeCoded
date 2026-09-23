@@ -460,6 +460,16 @@ confirmed all 3 persisted correctly with exact same values.")
   dash needs `strings -e l`). Both initially looked like missing features and
   were not.
 
+- v5 APK verified (2026-09-23): `scripts/build-apk.sh` exit 0, stages 52s / 45s
+  / 3m34s (~5 min — adding a native module does NOT need prebuild; Gradle
+  autolinks from node_modules at configure time). 34 MiB, `apksigner verify` →
+  Verifies, badging unchanged. Confirmed the new native modules are really
+  compiled in by scanning the APK's dex: `expo/modules/clipboard/ClipboardModule`
+  **and `ClipboardImageKt`** (the image-copy path specifically), plus
+  `expo/modules/font/FontLoaderModule` for the peer-dependency fix. All four JS
+  actions ("Copy image", "Copy text", "Share image", "Share text") and both
+  confirmation strings are in the Hermes bundle.
+
 ## Blockers / known issues
 
 (Document anything infeasible, any fallback taken instead of the original
@@ -501,6 +511,12 @@ plan, or anything left unfinished, with reasoning.)
   flexGrow: 0, flexShrink: 0 }}` on the ScrollView, `alignItems: 'center'` on
   the content container, and an explicit `height` on the chip. Reuse that
   recipe for any new chip row.
+- Clipboard images are not universally pasteable on Android: it works in apps
+  that accept image paste (WhatsApp, Gmail, Messages, most Gboard fields), but
+  Instagram/Snapchat story composers generally ignore the clipboard — use
+  "Share image" for those. Not reproducible in this environment; if Amir reports
+  a specific app refusing the paste, that is the likely cause rather than a bug
+  in `setImageAsync`.
 - Weight units: there is deliberately **no** kg/lb selector. Units are inferred
   from what you type and normalised to kg for every comparison, which keeps the
   UI free of a setting that would need migrating and back-converting. If a real
