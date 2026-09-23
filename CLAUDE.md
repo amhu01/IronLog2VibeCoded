@@ -33,7 +33,8 @@ Stack: Expo SDK 57 (React Native 0.86, React 19.2), TypeScript, React
 Navigation 7 (bottom tabs + native stack for History), expo-sqlite,
 expo-file-system (new `File`/`Paths` API) + expo-sharing + expo-document-picker,
 react-native-svg (hand-rolled line chart, no chart lib),
-@react-native-community/datetimepicker, @expo/vector-icons (Ionicons).
+@react-native-community/datetimepicker, @expo/vector-icons (Ionicons) with
+expo-font, expo-clipboard.
 Entry: `index.ts` → `App.tsx` (opens DB,
 then mounts `src/navigation/RootNavigator.tsx`). Code lives under `src/`
 (`db/`, `screens/`, `components/`, `navigation/`, `utils/`, `types/`).
@@ -137,6 +138,11 @@ Run: `npx expo start` then open in Expo Go. Typecheck: `npx tsc --noEmit`.
      character count (generously) and `truncateToWidth()` ellipsises; the title
      also steps down 72 → 56 → 44 px as it gets longer. If you change fonts or
      sizes, re-render the previews (see Verification log) before trusting it.
+   - v5 (2026-09-23): four actions — **Copy image** (`expo-clipboard`
+     `setImageAsync(base64)`, the Strava-style "copy" ask), Share image, Copy
+     text, Share text — with an inline confirmation pill. `captureBase64()` is
+     the single rasterise path shared by copy and share. Note `setImageAsync`
+     wants raw base64 with **no** `data:image/png;base64,` prefix.
    - A PANEL / CLEAR toggle controls a translucent dark scrim behind the text.
      CLEAR is the literal "transparent background" ask, but white text is
      unreadable on a light photo — verified by rendering onto near-white — so
@@ -527,6 +533,20 @@ plan, or anything left unfinished, with reasoning.)
   JDK 24+ native-access warning, which AGP treats as a configure error). The
   same stage passes on JDK 21. The script now always exports sdkman's JDK 21
   when present and prints which JDK it's using.
+- `npx expo-doctor` is at 20/21 as of 2026-09-23. The one remaining failure is
+  "packages match versions required by installed Expo SDK": 6 packages are a
+  patch behind (expo 57.0.21 vs ~57.0.24, expo-document-picker, expo-file-system,
+  expo-sharing, expo-sqlite, expo-system-ui). Deliberately **not** bumped —
+  unrelated to the change in hand, and a patch bump to expo core + sqlite +
+  file-system can't be smoke-tested without a device. Do it as its own change
+  (`npx expo install --check`) when there's a phone to verify on.
+- Fixed 2026-09-23: expo-doctor caught that `@expo/vector-icons` (added in v2)
+  needs `expo-font` as a **direct** dependency — it was only present
+  transitively, so a future `npm install`/dedupe could have pruned it and
+  broken every icon at runtime outside Expo Go. Now installed directly.
+  `expo install` also appended `expo-font` to `app.json` plugins; that plugin is
+  a no-op without a `fonts` option (`if (!props) return config`), so **no
+  prebuild was run** and `android/` intentionally does not reflect it.
 - `expo-splash-screen` is not installed (not pulled in by `expo` in this SDK
   setup), so the splash is just the dark `backgroundColor`; `assets/splash-icon.png`
   exists for whenever the plugin is added

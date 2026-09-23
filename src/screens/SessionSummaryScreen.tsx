@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import * as Clipboard from 'expo-clipboard';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import type Svg from 'react-native-svg';
 import { Button } from '../components/Button';
@@ -39,7 +40,8 @@ function summaryToText(summary: SessionSummary): string {
 export function SessionSummaryScreen({ route }: Props) {
   const { sessionId } = route.params;
   const [summary, setSummary] = useState<SessionSummary | null>(null);
-  const [sharing, setSharing] = useState(false);
+  const [busy, setBusy] = useState<'share' | 'copy' | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
   const [scrim, setScrim] = useState(true);
   const svgRef = useRef<React.ElementRef<typeof Svg> | null>(null);
   const { width: screenWidth } = useWindowDimensions();
@@ -50,39 +52,65 @@ export function SessionSummaryScreen({ route }: Props) {
     }, [sessionId])
   );
 
-  async function handleShareImage() {
-    const node = svgRef.current;
-    if (!node || !summary) return;
-    setSharing(true);
-    try {
-      const height = cardHeight(summary);
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('Rendering the image timed out.')), 10000);
-        try {
-          node.toDataURL(
-            (data: string) => {
-              clearTimeout(timer);
-              resolve(data);
-            },
-            { width: CARD_WIDTH, height }
-          );
-        } catch (e) {
-          clearTimeout(timer);
-          reject(e);
-        }
-      });
+  useEffect(() => {
+    if (!status) return;
+    const id = setTimeout(() => setStatus(null), 4000);
+    return () => clearTimeout(id);
+  }, [status]);
 
+  /** Rasterise the SVG card to raw base64 PNG (no data: prefix). */
+  function captureBase64(): Promise<string> {
+    const node = svgRef.current;
+    if (!node || !summary) return Promise.reject(new Error('The card is not ready yet.'));
+    const height = cardHeight(summary);
+    return new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Rendering the image timed out.')), 10000);
+      try {
+        node.toDataURL(
+          (data: string) => {
+            clearTimeout(timer);
+            resolve(data.replace(/^data:image\/png;base64,/, ''));
+          },
+          { width: CARD_WIDTH, height }
+        );
+      } catch (e) {
+        clearTimeout(timer);
+        reject(e);
+      }
+    });
+  }
+
+  async function handleShareImage() {
+    if (!summary) return;
+    setBusy('share');
+    setStatus(null);
+    try {
+      const base64 = await captureBase64();
       const file = new File(Paths.cache, `iron-log-${summary.date}.png`);
       if (file.exists) file.delete();
       file.create();
-      file.write(base64.replace(/^data:image\/png;base64,/, ''), { encoding: 'base64' });
+      file.write(base64, { encoding: 'base64' });
 
       if (!(await Sharing.isAvailableAsync())) throw new Error('Sharing is not available on this device.');
       await Sharing.shareAsync(file.uri, { mimeType: 'image/png', dialogTitle: 'Share workout', UTI: 'public.png' });
     } catch (e) {
       Alert.alert('Could not share image', e instanceof Error ? e.message : String(e));
     } finally {
-      setSharing(false);
+      setBusy(null);
+    }
+  }
+
+  async function handleCopyImage() {
+    if (!summary) return;
+    setBusy('copy');
+    setStatus(null);
+    try {
+      await Clipboard.setImageAsync(await captureBase64());
+      setStatus('Image copied — long-press and paste it into any app that takes images.');
+    } catch (e) {
+      Alert.alert('Could not copy image', e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -92,6 +120,16 @@ export function SessionSummaryScreen({ route }: Props) {
       await Share.share({ message: summaryToText(summary) });
     } catch (e) {
       Alert.alert('Could not share', String(e));
+    }
+  }
+
+  async function handleCopyText() {
+    if (!summary) return;
+    try {
+      await Clipboard.setStringAsync(summaryToText(summary));
+      setStatus('Stats copied as text.');
+    } catch (e) {
+      Alert.alert('Could not copy', String(e));
     }
   }
 
@@ -153,9 +191,29 @@ export function SessionSummaryScreen({ route }: Props) {
         </Card>
 
         <View style={styles.actions}>
-          <Button title="Share image" icon="image-outline" onPress={handleShareImage} loading={sharing} />
+          {status && (
+            <View style={styles.statusPill}>
+              <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+              <Text style={styles.statusText}>{status}</Text>
+            </View>
+          )}
+          <View style={styles.actionRow}>
+            <View style={styles.actionCell}>
+              <Button title="Copy image" icon="copy-outline" onPress={handleCopyImage} loading={busy === 'copy'} />
+            </View>
+            <View style={styles.actionCell}>
+              <Button title="Share image" variant="secondary" icon="share-outline" onPress={handleShareImage} loading={busy === 'share'} />
+            </View>
+          </View>
           <View style={styles.gap} />
-          <Button title="Share as text" variant="secondary" icon="text-outline" onPress={handleShareText} />
+          <View style={styles.actionRow}>
+            <View style={styles.actionCell}>
+              <Button title="Copy text" variant="secondary" icon="clipboard-outline" onPress={handleCopyText} />
+            </View>
+            <View style={styles.actionCell}>
+              <Button title="Share text" variant="secondary" icon="text-outline" onPress={handleShareText} />
+            </View>
+          </View>
         </View>
 
         <Card>
@@ -267,6 +325,30 @@ const styles = StyleSheet.create({
   },
   actions: {
     marginBottom: spacing.md,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  actionCell: {
+    flex: 1,
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.successSoft,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  statusText: {
+    flex: 1,
+    color: colors.success,
+    fontSize: fontSize.small,
+    fontWeight: '700',
+    lineHeight: 18,
   },
   gap: {
     height: spacing.sm,
