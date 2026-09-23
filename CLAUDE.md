@@ -135,9 +135,27 @@ Run: `npx expo start` then open in Expo Go. Typecheck: `npx tsc --noEmit`.
      already ships in the app, so the whole feature needed no new native module
      and therefore no `expo prebuild`/full native rebuild.
      SVG has no text metrics, so `textWidth()` estimates advance width from
-     character count (generously) and `truncateToWidth()` ellipsises; the title
-     also steps down 72 → 56 → 44 px as it gets longer. If you change fonts or
-     sizes, re-render the previews (see Verification log) before trusting it.
+     character count and `truncateToWidth()` ellipsises; the title steps down
+     72 → 56 → 44 px as it gets longer. The per-character factors (0.86 bold /
+     0.78 regular) are **calibrated, not guessed**: rendering sample strings and
+     measuring the trimmed bitmap gave a worst case of 0.82 for bold uppercase,
+     so these sit just above it. Overestimating only adds whitespace;
+     underestimating makes word-cloud entries overlap. If you change fonts or
+     sizes, re-run the calibration and re-render the previews (see Verification
+     log) before trusting it.
+   - v6 (2026-09-23): the per-exercise list (name · machine · top set · PR badge)
+     was replaced by a **word cloud** of exercise names — no weights or reps —
+     because a long session overflowed the list and got truncated. `layoutCloud`
+     centre-packs names into wrapped rows, font size scaled 28→66 px by that
+     exercise's **set count**, PRs in orange, session order preserved. It grows
+     by wrapping instead of truncating, so every lift shows: a 14-exercise
+     session fits in less height than the old 7-row list. Muscle-group pills
+     wrap onto extra rows too (`layoutPills`) rather than being dropped.
+     `computeLayout()` is now the single source of vertical positions so
+     `cardHeight()` can never drift from the render, and it rounds the canvas to
+     an integer (fractional row heights otherwise produce a non-integer height
+     that rasterisers reject). The in-app "Breakdown" card below the preview
+     still lists full per-exercise detail — only the shared image changed.
    - v5 (2026-09-23): four actions — **Copy image** (`expo-clipboard`
      `setImageAsync(base64)`, the Strava-style "copy" ask), Share image, Copy
      text, Share text — with an inline confirmation pill. `captureBase64()` is
@@ -469,6 +487,18 @@ confirmed all 3 persisted correctly with exact same values.")
   `expo/modules/font/FontLoaderModule` for the peer-dependency fix. All four JS
   actions ("Copy image", "Copy text", "Share image", "Share text") and both
   confirmation strings are in the Hermes bundle.
+
+- Word-cloud card verified visually (2026-09-23): re-rendered through the same
+  SVG-shim + `sharp` harness over near-white, for three cases — typical (5
+  exercises), many (14 exercises, 6 muscle groups, one 43-char name) and the
+  single-exercise edge case. First render **overlapped** ("HAMMER CURL" ran into
+  "PREACHER CURL"), which is exactly the failure a cloud makes obvious and a
+  list never would. Root cause was the width estimate: measuring trimmed
+  bitmaps of nine sample strings showed a true worst case of 0.82 per character
+  against the 0.74 in use. Raised to 0.86/0.78 → no overlaps. That fix then
+  pushed two muscle-group pills off the row, so pills now wrap instead of being
+  dropped (all 6 show). Final: 14 exercises + 6 pills in 1080×1386, every lift
+  visible, PRs orange, sizes tracking set count.
 
 ## Blockers / known issues
 
