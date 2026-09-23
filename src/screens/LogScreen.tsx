@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { SessionEditor } from '../components/SessionEditor';
@@ -19,6 +19,7 @@ type Props = BottomTabScreenProps<RootTabParamList, 'Log'>;
 interface Toast {
   text: string;
   pr: boolean;
+  sessionId: number;
 }
 
 export function LogScreen({ route, navigation }: Props) {
@@ -64,12 +65,12 @@ export function LogScreen({ route, navigation }: Props) {
     setSaving(true);
     try {
       const prs = await findNewPRs(exercises);
-      await createSession(date, exercises, name);
+      const sessionId = await createSession(date, exercises, name);
       const label = name ? `“${name}”` : 'session';
       const prText = prs.length
         ? ` · NEW PR: ${prs.map((p) => `${p.name}${p.machine ? ` (${p.machine})` : ''} ${formatWeight(p.effectiveWeight)}`).join(', ')}`
         : '';
-      setToast({ text: `Saved ${label} for ${formatDateDisplay(date)}${prText}`, pr: prs.length > 0 });
+      setToast({ text: `Saved ${label} for ${formatDateDisplay(date)}${prText}`, pr: prs.length > 0, sessionId });
       setTemplate(null);
       setFormKey((k) => k + 1);
       refresh();
@@ -90,6 +91,13 @@ export function LogScreen({ route, navigation }: Props) {
         <View style={[styles.toast, toast.pr && styles.toastPr]}>
           <Ionicons name={toast.pr ? 'trophy' : 'checkmark-circle'} size={18} color={toast.pr ? colors.primary : colors.success} />
           <Text style={[styles.toastText, toast.pr && styles.toastTextPr]}>{toast.text}</Text>
+          <Pressable
+            style={styles.toastAction}
+            onPress={() => navigation.navigate('History', { screen: 'SessionSummary', params: { sessionId: toast.sessionId } })}
+            hitSlop={6}
+          >
+            <Text style={[styles.toastActionText, toast.pr && styles.toastTextPr]}>SUMMARY</Text>
+          </Pressable>
         </View>
       )}
       <SessionEditor
@@ -136,5 +144,16 @@ const styles = StyleSheet.create({
   },
   toastTextPr: {
     color: colors.primary,
+  },
+  toastAction: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  toastActionText: {
+    color: colors.success,
+    fontSize: fontSize.tiny,
+    fontWeight: '800',
+    letterSpacing: 1,
+    textDecorationLine: 'underline',
   },
 });

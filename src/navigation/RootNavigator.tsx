@@ -8,6 +8,7 @@ import { HistoryScreen } from '../screens/HistoryScreen';
 import { LogScreen } from '../screens/LogScreen';
 import { ProgressScreen } from '../screens/ProgressScreen';
 import { SessionDetailScreen } from '../screens/SessionDetailScreen';
+import { SessionSummaryScreen } from '../screens/SessionSummaryScreen';
 import { StatsScreen } from '../screens/StatsScreen';
 import { colors } from '../theme';
 import type { HistoryStackParamList, RootTabParamList } from './types';
@@ -28,6 +29,7 @@ function HistoryStackNavigator() {
     >
       <HistoryStack.Screen name="HistoryList" component={HistoryScreen} options={{ headerShown: false }} />
       <HistoryStack.Screen name="SessionDetail" component={SessionDetailScreen} options={{ title: 'Session' }} />
+      <HistoryStack.Screen name="SessionSummary" component={SessionSummaryScreen} options={{ title: 'Summary' }} />
     </HistoryStack.Navigator>
   );
 }

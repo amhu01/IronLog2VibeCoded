@@ -127,7 +127,7 @@ export function ProgressScreen() {
           {machines.length > 1 && (
             <View style={styles.machineBlock}>
               <Text style={styles.machineLabel}>MACHINE — numbers only compare on the same one</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll} contentContainerStyle={styles.chips}>
                 <Pressable style={[styles.chip, activeFilter === null && styles.chipActive]} onPress={() => setMachineFilter(null)}>
                   <Text style={[styles.chipText, activeFilter === null && styles.chipTextActive]}>ALL</Text>
                 </Pressable>
@@ -150,7 +150,7 @@ export function ProgressScreen() {
           </View>
 
           <Card>
-            <CardTitle title="Best effective weight" right={delta !== null ? <DeltaPill delta={delta} /> : undefined} />
+            <CardTitle title="Best effective weight (kg)" right={delta !== null ? <DeltaPill delta={delta} /> : undefined} />
             <LineChart points={chartPoints} />
           </Card>
 
@@ -245,12 +245,18 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: spacing.xs + 2,
   },
+  chipsScroll: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
   chips: {
     gap: spacing.xs,
+    alignItems: 'center',
   },
   chip: {
+    height: 32,
+    justifyContent: 'center',
     paddingHorizontal: spacing.sm + 4,
-    paddingVertical: spacing.xs + 2,
     borderRadius: radius.pill,
     backgroundColor: colors.surfaceAlt,
     borderWidth: 1,

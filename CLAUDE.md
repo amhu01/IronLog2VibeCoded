@@ -19,6 +19,11 @@ machine/brand per exercise (the user trains on machines whose resistance
 scales differ, so weights are only comparable on the same machine — this
 drives per-machine auto-fill, Progress filtering and PBs), plus QoL: rest
 timer, session volume, "NEW PR" in the save toast, and "Repeat this session".
+v4 (2026-09-23): the per-set RIR flag became **WS (working set)** — Amir's
+range is 4-8 reps and hitting 8 means add weight, so "reps in reserve" was the
+wrong label; a **session summary + shareable card**; unit-aware weight parsing
+(typing "60KG" used to chart as 0); a fix for stretched muscle-group pills in
+the exercise search; and backup import that still accepts pre-v4 `rir` files.
 This file is the source of truth
 for plan, progress, decisions, and blockers — update it continuously as work
 happens. If a session ends (out of context/tokens) or a different model picks
@@ -52,9 +57,17 @@ Run: `npx expo start` then open in Expo Go. Typecheck: `npx tsc --noEmit`.
   - hasBaseResistance/baseResistance exist for banded or assisted exercises, where the
     "effective weight" of a set = baseResistance + set.weight (e.g. a banded pull-up:
     base resistance -20kg assist + 0kg added = -20kg effective).
-- Set: { weight: number | string, reps: number | string, rir?: boolean }
-  - rir = true means "reps in reserve 1-2" (i.e. not to failure) — just a small tag
-    shown in history.
+- Set: { weight: number | string, reps: number | string, ws?: boolean }
+  - ws = true marks a **working set** (v4; was `rir` before). Amir works in a 4-8
+    rep range and treats reaching 8 as the signal to add weight and start low
+    again, so the flag marks the set that counts rather than "reps in reserve".
+    It is still just a small boolean tag shown in history and on the share card.
+  - weight is free text on purpose: "60", "60KG", "135 lbs", "BW" are all
+    accepted. Anything numeric is parsed by
+    [src/utils/weight.ts](src/utils/weight.ts) (`weightToKg` normalises lb → kg
+    so mixed units still compare; unitless is assumed kg). Non-numeric text like
+    "BW" yields null and the set is skipped in charts/volume rather than counted
+    as 0 — the old `Number("60KG")` → NaN → 0 path was a reported bug.
 
 ## Screens / features to implement
 
@@ -89,6 +102,8 @@ Run: `npx expo start` then open in Expo Go. Typecheck: `npx tsc --noEmit`.
      machine; a first-ever use of a machine is not a PR). The tab accepts a
      `template` route param (from History → "Repeat this session") that
      pre-fills name + exercises and is cleared with `setParams` once consumed.
+     v4: the per-set flag button reads **WS**, and the save toast carries a
+     SUMMARY link that deep-links into the History stack's SessionSummary.
 
 2. **History**: list of past sessions (most recent first), tap to see full detail
    (exercises + sets for that day), with edit and delete.
@@ -102,6 +117,31 @@ Run: `npx expo start` then open in Expo Go. Typecheck: `npx tsc --noEmit`.
      name/date, "N exercises · N sets · Nk volume", muscle-group/machine/base
      tags per exercise, and a "Repeat this session" button that navigates to
      the Log tab with the session as a template.
+
+2b. **Session summary / share card** (v4, added on request — "like Strava where
+   you can copy your stats with a transparent background").
+   - Status: done — [SessionSummaryScreen.tsx](src/screens/SessionSummaryScreen.tsx),
+     third screen in the History stack, reachable from session detail
+     ("Summary & share") and from the Log save toast. Data comes from
+     `getSessionSummary` (volume, set count, working sets, muscle groups, top
+     set per exercise, and **which lifts were PRs that day** — compared only
+     against sessions strictly earlier by date, or the same date with a lower
+     id, on the same machine).
+   - The image is an SVG ([ShareCard.tsx](src/components/ShareCard.tsx))
+     rasterised through react-native-svg's `toDataURL`, written to the cache
+     with `file.write(base64, { encoding: 'base64' })` and handed to
+     `Sharing.shareAsync`. **Deliberately no `react-native-view-shot`** — svg
+     already ships in the app, so the whole feature needed no new native module
+     and therefore no `expo prebuild`/full native rebuild.
+     SVG has no text metrics, so `textWidth()` estimates advance width from
+     character count (generously) and `truncateToWidth()` ellipsises; the title
+     also steps down 72 → 56 → 44 px as it gets longer. If you change fonts or
+     sizes, re-render the previews (see Verification log) before trusting it.
+   - A PANEL / CLEAR toggle controls a translucent dark scrim behind the text.
+     CLEAR is the literal "transparent background" ask, but white text is
+     unreadable on a light photo — verified by rendering onto near-white — so
+     PANEL (62% #0b0d12, rounded) is the default. There is also "Share as text"
+     for pasting into a chat.
 
 3. **Progress**: pick an exercise, see a simple line/trend chart of its effective
    weight (or best set) over time.
@@ -117,7 +157,8 @@ Run: `npx expo start` then open in Expo Go. Typecheck: `npx tsc --noEmit`.
      NO MACHINE) filters everything below it — the filter is client-side over
      `getProgressForExercise`, which now returns `machine` and `sessionName`
      per point. The search modal shows each exercise's muscle group and has
-     group filter chips.
+     group filter chips. v4: chart values are kg (title says so) and
+     unit-suffixed entries like "60KG" now plot correctly instead of 0.
 
 4. **Stats**: total sessions logged, distinct exercises tracked, sessions in the
    last 7 days, weeks since first session, most-trained exercise (by session count),
@@ -142,7 +183,10 @@ Run: `npx expo start` then open in Expo Go. Typecheck: `npx tsc --noEmit`.
      expo-document-picker, validates the shape (also accepts `{ sessions: [...] }`
      for old-app exports), then asks Merge / Replace all via Alert. v3: the file
      also carries `name` per session and `muscleGroup` / `machine` per exercise
-     (all optional on import, uppercased like the DB).
+     (all optional on import, uppercased like the DB). v4: the parser moved out
+     of the screen into [src/utils/backup.ts](src/utils/backup.ts) so it can be
+     verified headlessly, exports write `ws`, and import accepts **either** `ws`
+     or the pre-v4 `rir` key (`ws: !!(o.ws ?? o.rir)`) — keep that fallback.
 
 ## Storage
 
@@ -166,7 +210,11 @@ verify thoroughly before building screens on top of it.
   `addColumnIfMissing` (checks `PRAGMA table_info` then `ALTER TABLE ADD
   COLUMN`) so databases from earlier builds upgrade in place — keep every
   future schema change additive like this; never drop/recreate tables. Blank
-  string means "not set". weight/reps stored as TEXT to preserve the `number | string`
+  string means "not set". In v4 `sets.rir` became `sets.ws` via
+  `renameColumnIfNeeded` (`ALTER TABLE ... RENAME COLUMN`, guarded on the old
+  column existing and the new one not) — a rename keeps every existing flag,
+  unlike add-new-column-and-copy, and is still non-destructive. weight/reps
+  stored as TEXT to preserve the `number | string`
   data model, converted to number on read when the string is numeric. See
   [src/db/database.ts](src/db/database.ts) and [src/db/repository.ts](src/db/repository.ts).
 - Exercise names are normalised to UPPERCASE on write (`draftsToExercises` in
@@ -354,6 +402,45 @@ confirmed all 3 persisted correctly with exact same values.")
   100% white — i.e. the new icon, not the Expo placeholder. Not yet seen on a
   phone.
 
+- v4 verified (2026-09-23): `npx tsc --noEmit` clean; `npx expo export
+  --platform android` exit 0. 38 checks in the better-sqlite3 harness plus a
+  separate-process check, seeded with the **v3 schema actually on Amir's phone**
+  (`sets.rir`, sessions already having name/muscle_group/machine):
+  • weight parsing — "60", "60KG", "65 kg", "62.5kg", "62,5" all parse; "135
+  lbs"/"45lb" convert to kg; "-20" stays negative; "BW" and "" return null
+  (skipped, **not** 0, which was the reported Progress bug); "8 reps" → 8.
+  • the rir → ws rename left `sets` with `ws` and no `rir`, flags survived
+  ([false, true]), weights stayed byte-identical ("60KG", "65 kg") and session
+  names were untouched.
+  • Progress for a lift logged as "60KG"/"65 kg"/"70kg" returned 65 then 70 (was
+  0), banded stayed −20, and points now carry sessionId.
+  • volumes recomputed from suffixed text (60*10 + 65*8, 70*8).
+  • `getSessionSummary`: headline numbers, muscle groups, top set rendered from
+  the raw text ("75kg × 6"), PR detected against the previous 70 (+5), the
+  **earliest** session correctly not a PR, and a middle session compared only
+  against earlier ones.
+  • a pre-v4 backup using `rir` imported with the flags mapped onto `ws`;
+  new-format `ws`/machine/muscleGroup also parse; `{sessions:[...]}` still
+  accepted; garbage and bad dates still rejected; export emits `"ws"` and never
+  `"rir"`, and export → import → export was identical.
+  • a fresh process on a brand-new database created `ws` directly and wrote/read
+  a session (volume 500, 1 working set).
+- Share card rendered and inspected (2026-09-23): rather than trust the layout,
+  compiled ShareCard.tsx with a shim mapping react-native-svg primitives to
+  plain SVG tags, serialised it, and rasterised with `sharp` — then actually
+  looked at the PNGs composited over mid-grey and near-white. That caught four
+  real layout bugs, all fixed: the SHOULDERS pill's text overflowed its capsule
+  (width estimate raised to 0.74/0.68 per char + 52 px padding), "VOLUME (KG)"
+  crowded the next column (→ "VOLUME KG"/"LIFTS", 22 px), long exercise names
+  collided with their set values (→ `truncateToWidth`), and a long session title
+  ran clean off the card (→ step-down font size + truncate). The near-white
+  render is also what proved pure-transparent white text is unreadable and drove
+  the PANEL/CLEAR toggle. Note the preview font is a wide serif fallback while
+  the phone uses Roboto, so on-device text has **more** room, not less — the
+  previews are a conservative check. Stress case (9 exercises, 6 muscle groups,
+  43-char name) stayed inside the card, dropped the 6th pill and showed
+  "+ 2 more exercises".
+
 ## Blockers / known issues
 
 (Document anything infeasible, any fallback taken instead of the original
@@ -387,6 +474,19 @@ plan, or anything left unfinished, with reasoning.)
   plain `View` inside the History stack whose header owns the top inset).
 - Progress chart is a minimal hand-rolled SVG line chart (no charting library)
   to avoid third-party compatibility risk on the very new RN 0.86 / React 19.
+- A horizontal `ScrollView` inside a flex-column parent stretches to fill the
+  remaining height, and its content container then stretches every child to that
+  height — this is what made the muscle-group pills in the Progress → exercise
+  search look "messed up" (tall, misaligned capsules). Fix applied in all three
+  chip rows (ExerciseSearchModal, ExerciseCard, ProgressScreen): `style={{
+  flexGrow: 0, flexShrink: 0 }}` on the ScrollView, `alignItems: 'center'` on
+  the content container, and an explicit `height` on the chip. Reuse that
+  recipe for any new chip row.
+- Weight units: there is deliberately **no** kg/lb selector. Units are inferred
+  from what you type and normalised to kg for every comparison, which keeps the
+  UI free of a setting that would need migrating and back-converting. If a real
+  need for per-exercise units appears, add a column additively and convert at
+  read time; do not silently reinterpret existing numbers.
 - The Android package id / iOS bundle id are set to `com.amirhusni.ironlog` in
   app.json (required by EAS). Change before publishing if you want a different id.
 - `CI=1 npx expo prebuild --platform android --no-install` over an EXISTING

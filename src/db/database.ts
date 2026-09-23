@@ -4,10 +4,21 @@ const DB_NAME = 'ironlog.db';
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
-async function addColumnIfMissing(db: SQLite.SQLiteDatabase, table: string, column: string, ddl: string) {
+async function columnNames(db: SQLite.SQLiteDatabase, table: string): Promise<string[]> {
   const cols = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(${table})`);
-  if (!cols.some((c) => c.name === column)) {
+  return cols.map((c) => c.name);
+}
+
+async function addColumnIfMissing(db: SQLite.SQLiteDatabase, table: string, column: string, ddl: string) {
+  if (!(await columnNames(db, table)).includes(column)) {
     await db.execAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+  }
+}
+
+async function renameColumnIfNeeded(db: SQLite.SQLiteDatabase, table: string, from: string, to: string) {
+  const cols = await columnNames(db, table);
+  if (cols.includes(from) && !cols.includes(to)) {
+    await db.execAsync(`ALTER TABLE ${table} RENAME COLUMN ${from} TO ${to}`);
   }
 }
 
@@ -40,7 +51,7 @@ async function openAndMigrate(): Promise<SQLite.SQLiteDatabase> {
       session_exercise_id INTEGER NOT NULL REFERENCES session_exercises(id) ON DELETE CASCADE,
       weight TEXT,
       reps TEXT,
-      rir INTEGER NOT NULL DEFAULT 0,
+      ws INTEGER NOT NULL DEFAULT 0,
       position INTEGER NOT NULL DEFAULT 0
     );
 
@@ -54,6 +65,9 @@ async function openAndMigrate(): Promise<SQLite.SQLiteDatabase> {
   await addColumnIfMissing(db, 'sessions', 'name', `TEXT NOT NULL DEFAULT ''`);
   await addColumnIfMissing(db, 'session_exercises', 'muscle_group', `TEXT NOT NULL DEFAULT ''`);
   await addColumnIfMissing(db, 'session_exercises', 'machine', `TEXT NOT NULL DEFAULT ''`);
+  // v4 renamed the per-set flag from "reps in reserve" to "working set"; the flag
+  // itself is unchanged, so rename in place rather than losing the marks.
+  await renameColumnIfNeeded(db, 'sets', 'rir', 'ws');
 
   // Exercise names are stored uppercase; fold any rows written before that rule.
   await db.runAsync(`UPDATE session_exercises SET name = UPPER(name) WHERE name <> UPPER(name)`);

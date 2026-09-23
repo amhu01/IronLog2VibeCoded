@@ -83,7 +83,13 @@ export function ExerciseSearchModal({ visible, entries, selected, allowCreate, o
         </View>
 
         {groups.length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.chipsScroll}
+            contentContainerStyle={styles.chips}
+            keyboardShouldPersistTaps="handled"
+          >
             <Pressable style={[styles.chip, group === null && styles.chipActive]} onPress={() => setGroup(null)}>
               <Text style={[styles.chipText, group === null && styles.chipTextActive]}>ALL</Text>
             </Pressable>
@@ -179,14 +185,22 @@ const styles = StyleSheet.create({
     fontSize: fontSize.h3,
     paddingVertical: 12,
   },
+  // A horizontal ScrollView stretches to fill a flex column parent, and its content
+  // container then stretches every chip to that height. Pin the height instead.
+  chipsScroll: {
+    flexGrow: 0,
+    flexShrink: 0,
+  },
   chips: {
     gap: spacing.xs,
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
+    alignItems: 'center',
   },
   chip: {
+    height: 32,
+    justifyContent: 'center',
     paddingHorizontal: spacing.sm + 4,
-    paddingVertical: spacing.xs + 2,
     borderRadius: radius.pill,
     backgroundColor: colors.surfaceAlt,
     borderWidth: 1,

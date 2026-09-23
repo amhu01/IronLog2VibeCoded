@@ -36,11 +36,11 @@ export function SetRow({ index, set, onChange, onRemove }: SetRowProps) {
         selectTextOnFocus
       />
       <Pressable
-        style={[styles.rirBtn, set.rir && styles.rirBtnActive]}
-        onPress={() => onChange({ ...set, rir: !set.rir })}
+        style={[styles.wsBtn, set.ws && styles.wsBtnActive]}
+        onPress={() => onChange({ ...set, ws: !set.ws })}
         hitSlop={4}
       >
-        <Text style={[styles.rirText, set.rir && styles.rirTextActive]}>RIR</Text>
+        <Text style={[styles.wsText, set.ws && styles.wsTextActive]}>WS</Text>
       </Pressable>
       <Pressable style={styles.removeBtn} onPress={onRemove} hitSlop={6}>
         <Ionicons name="close" size={18} color={colors.textMuted} />
@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
     fontSize: fontSize.h3,
     fontWeight: '700',
   },
-  rirBtn: {
+  wsBtn: {
     width: 44,
     height: 40,
     borderWidth: 1,
@@ -90,17 +90,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  rirBtnActive: {
+  wsBtnActive: {
     backgroundColor: colors.primarySoft,
     borderColor: colors.primary,
   },
-  rirText: {
+  wsText: {
     color: colors.textFaint,
     fontSize: fontSize.tiny,
     fontWeight: '800',
     letterSpacing: 0.5,
   },
-  rirTextActive: {
+  wsTextActive: {
     color: colors.primary,
   },
   removeBtn: {

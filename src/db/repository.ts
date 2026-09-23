@@ -6,11 +6,14 @@ import type {
   MuscleGroupSets,
   PersonalBest,
   Session,
+  SessionSummary,
   SetEntry,
   StatsSummary,
+  SummaryExercise,
 } from '../types';
 import { dateToString, parseDateString } from '../utils/date';
-import { bestEffectiveWeight } from '../utils/stats';
+import { bestEffectiveWeight, countSets, exerciseVolume, sessionVolume } from '../utils/stats';
+import { parseCount, weightToKg } from '../utils/weight';
 
 type Db = Awaited<ReturnType<typeof getDb>>;
 
@@ -50,15 +53,15 @@ interface SetRow {
   session_exercise_id: number;
   weight: string | null;
   reps: string | null;
-  rir: number;
+  ws: number;
   position: number;
 }
 
 const EXERCISE_COLS = `id, session_id, name, muscle_group, machine, has_base_resistance, base_resistance, position`;
-const SET_COLS = `id, session_exercise_id, weight, reps, rir, position`;
+const SET_COLS = `id, session_exercise_id, weight, reps, ws, position`;
 
 function rowsToSets(rows: SetRow[]): SetEntry[] {
-  return rows.map((r) => ({ weight: toNumOrStr(r.weight), reps: toNumOrStr(r.reps), rir: !!r.rir }));
+  return rows.map((r) => ({ weight: toNumOrStr(r.weight), reps: toNumOrStr(r.reps), ws: !!r.ws }));
 }
 
 function rowToExercise(row: SessionExerciseRow, sets: SetEntry[]): Exercise {
@@ -90,11 +93,11 @@ async function insertExercisesForSession(db: Db, sessionId: number, exercises: E
     for (let j = 0; j < ex.sets.length; j++) {
       const s = ex.sets[j];
       await db.runAsync(
-        `INSERT INTO sets (session_exercise_id, weight, reps, rir, position) VALUES (?, ?, ?, ?, ?)`,
+        `INSERT INTO sets (session_exercise_id, weight, reps, ws, position) VALUES (?, ?, ?, ?, ?)`,
         sessionExerciseId,
         toStorable(s.weight),
         toStorable(s.reps),
-        s.rir ? 1 : 0,
+        s.ws ? 1 : 0,
         j
       );
     }
@@ -161,9 +164,9 @@ export async function getSessionsList(): Promise<SessionListItem[]> {
     const item = bySession.get(r.session_id);
     if (!item) continue;
     item.setCount += 1;
-    const w = Number(r.weight);
-    const reps = Number(r.reps);
-    if (r.weight && r.reps && !Number.isNaN(w) && !Number.isNaN(reps) && w > 0 && reps > 0) item.volume += w * reps;
+    const kg = weightToKg(r.weight);
+    const reps = parseCount(r.reps);
+    if (kg !== null && reps !== null && kg > 0 && reps > 0) item.volume += kg * reps;
   }
   return sessions.map((s) => bySession.get(s.id)!);
 }
@@ -268,6 +271,7 @@ export async function getLastUseForExercise(name: string, machine?: string): Pro
 }
 
 export interface ProgressPoint {
+  sessionId: number;
   date: string;
   sessionName: string;
   machine: string;
@@ -275,7 +279,7 @@ export interface ProgressPoint {
   reps: number | string;
 }
 
-/** Best effective weight per session for an exercise, oldest first, across every machine. */
+/** Best effective weight (kg) per session for an exercise, oldest first, across every machine. */
 export async function getProgressForExercise(name: string): Promise<ProgressPoint[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<SessionExerciseRow & { date: string; session_name: string }>(
@@ -294,14 +298,21 @@ export async function getProgressForExercise(name: string): Promise<ProgressPoin
     const base = row.has_base_resistance ? row.base_resistance ?? 0 : 0;
     let best: { effectiveWeight: number; reps: number | string } | null = null;
     for (const sr of setRows) {
-      const w = Number(sr.weight);
-      const effective = base + (Number.isNaN(w) ? 0 : w);
+      const kg = weightToKg(sr.weight);
+      if (kg === null) continue;
+      const effective = base + kg;
       if (!best || effective > best.effectiveWeight) {
         best = { effectiveWeight: effective, reps: toNumOrStr(sr.reps) };
       }
     }
     if (best) {
-      points.push({ date: row.date, sessionName: row.session_name, machine: row.machine, ...best });
+      points.push({
+        sessionId: row.session_id,
+        date: row.date,
+        sessionName: row.session_name,
+        machine: row.machine,
+        ...best,
+      });
     }
   }
   return points;
@@ -327,6 +338,82 @@ export async function findNewPRs(exercises: Exercise[]): Promise<NewPR[]> {
     if (best > previousBest) prs.push({ name: normTag(ex.name), machine, effectiveWeight: best, previousBest });
   }
   return prs;
+}
+
+function formatTopSet(ex: Exercise): string {
+  let bestSet: SetEntry | null = null;
+  let bestKg: number | null = null;
+  for (const s of ex.sets) {
+    const kg = weightToKg(s.weight);
+    if (kg === null) continue;
+    if (bestKg === null || kg > bestKg) {
+      bestKg = kg;
+      bestSet = s;
+    }
+  }
+  const chosen = bestSet ?? ex.sets[0];
+  if (!chosen) return '—';
+  return `${chosen.weight} × ${chosen.reps}`;
+}
+
+/** Everything the summary/share card needs for one session, including which lifts were PRs that day. */
+export async function getSessionSummary(sessionId: number): Promise<SessionSummary | null> {
+  const session = await getSessionDetail(sessionId);
+  if (!session) return null;
+
+  const exercises: SummaryExercise[] = [];
+  let prCount = 0;
+  for (const ex of session.exercises) {
+    const machine = normTag(ex.machine);
+    const best = bestEffectiveWeight(ex);
+    let isPR = false;
+    let prDelta: number | null = null;
+    if (best !== null) {
+      const earlier = (await getProgressForExercise(ex.name)).filter(
+        (p) =>
+          p.machine === machine &&
+          p.sessionId !== sessionId &&
+          (p.date < session.date || (p.date === session.date && p.sessionId < sessionId))
+      );
+      if (earlier.length > 0) {
+        const previousBest = Math.max(...earlier.map((p) => p.effectiveWeight));
+        if (best > previousBest) {
+          isPR = true;
+          prDelta = best - previousBest;
+          prCount += 1;
+        }
+      }
+    }
+    exercises.push({
+      name: ex.name,
+      machine,
+      muscleGroup: normTag(ex.muscleGroup),
+      setCount: ex.sets.length,
+      topSet: formatTopSet(ex),
+      bestWeight: best,
+      volume: exerciseVolume(ex),
+      isPR,
+      prDelta,
+    });
+  }
+
+  const muscleGroups: string[] = [];
+  for (const ex of exercises) {
+    if (ex.muscleGroup && !muscleGroups.includes(ex.muscleGroup)) muscleGroups.push(ex.muscleGroup);
+  }
+
+  return {
+    id: session.id,
+    date: session.date,
+    name: session.name ?? '',
+    exerciseCount: session.exercises.length,
+    setCount: countSets(session.exercises),
+    workingSets: session.exercises.reduce((n, ex) => n + ex.sets.filter((s) => s.ws).length, 0),
+    volume: sessionVolume(session.exercises),
+    muscleGroups,
+    exercises,
+    prCount,
+  };
 }
 
 async function setsByMuscleGroup(db: Db, sinceDate?: string): Promise<MuscleGroupSets[]> {

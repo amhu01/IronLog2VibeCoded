@@ -167,7 +167,7 @@ export function SessionDetailScreen({ route, navigation }: Props) {
                   </Text>
                   <View style={styles.setTags}>
                     {effective !== null && <Tag text={`eff ${formatWeight(effective)}`} />}
-                    {s.rir && <Tag text="RIR" accent />}
+                    {s.ws && <Tag text="WS" accent />}
                   </View>
                 </View>
               );
@@ -176,9 +176,15 @@ export function SessionDetailScreen({ route, navigation }: Props) {
         ))}
 
         <View style={styles.actions}>
+          <Button
+            title="Summary & share"
+            icon="share-social-outline"
+            onPress={() => navigation.navigate('SessionSummary', { sessionId })}
+          />
+          <View style={styles.gap} />
           <Button title="Repeat this session" variant="secondary" icon="repeat" onPress={handleRepeat} />
           <View style={styles.gap} />
-          <Button title="Edit session" icon="create-outline" onPress={() => setEditing(true)} />
+          <Button title="Edit session" variant="secondary" icon="create-outline" onPress={() => setEditing(true)} />
           <View style={styles.gap} />
           <Button title="Delete session" variant="ghostDanger" icon="trash-outline" onPress={handleDelete} />
         </View>

@@ -17,7 +17,8 @@ export type MuscleGroup = (typeof MUSCLE_GROUPS)[number];
 export interface SetEntry {
   weight: number | string;
   reps: number | string;
-  rir?: boolean;
+  /** Working set — the set taken at the top of the working range. */
+  ws?: boolean;
 }
 
 export interface Exercise {
@@ -79,4 +80,29 @@ export interface StatsSummary {
   personalBests: PersonalBest[];
   setsByMuscleGroupLast7Days: MuscleGroupSets[];
   setsByMuscleGroupAllTime: MuscleGroupSets[];
+}
+
+export interface SummaryExercise {
+  name: string;
+  machine: string;
+  muscleGroup: string;
+  setCount: number;
+  topSet: string;
+  bestWeight: number | null;
+  volume: number;
+  isPR: boolean;
+  prDelta: number | null;
+}
+
+export interface SessionSummary {
+  id: number;
+  date: string;
+  name: string;
+  exerciseCount: number;
+  setCount: number;
+  workingSets: number;
+  volume: number;
+  muscleGroups: string[];
+  exercises: SummaryExercise[];
+  prCount: number;
 }

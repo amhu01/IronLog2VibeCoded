@@ -50,7 +50,7 @@ export function SessionEditor({
       draft.machine = lastUse.machine;
       draft.hasBaseResistance = !!lastUse.hasBaseResistance;
       draft.baseResistance = lastUse.baseResistance !== undefined ? String(lastUse.baseResistance) : '';
-      draft.sets = [{ weight: String(lastUse.lastWeight ?? ''), reps: String(lastUse.lastReps ?? ''), rir: false }];
+      draft.sets = [{ weight: String(lastUse.lastWeight ?? ''), reps: String(lastUse.lastReps ?? ''), ws: false }];
     }
     setExercises((prev) => [...prev, draft]);
   }
@@ -77,7 +77,7 @@ export function SessionEditor({
               ...e,
               hasBaseResistance: !!lastUse.hasBaseResistance,
               baseResistance: lastUse.baseResistance !== undefined ? String(lastUse.baseResistance) : '',
-              sets: [{ weight: String(lastUse.lastWeight ?? ''), reps: String(lastUse.lastReps ?? ''), rir: false }],
+              sets: [{ weight: String(lastUse.lastWeight ?? ''), reps: String(lastUse.lastReps ?? ''), ws: false }],
             }
           : e
       )

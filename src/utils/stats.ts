@@ -1,15 +1,10 @@
 import type { Exercise } from '../types';
-
-function asNumber(v: number | string): number | null {
-  if (String(v).trim() === '') return null;
-  const n = Number(v);
-  return Number.isNaN(n) ? null : n;
-}
+import { parseCount, weightToKg } from './weight';
 
 export function setEffectiveWeight(ex: Exercise, weight: number | string): number | null {
-  const w = asNumber(weight);
-  if (w === null) return null;
-  return (ex.hasBaseResistance ? ex.baseResistance ?? 0 : 0) + w;
+  const kg = weightToKg(weight);
+  if (kg === null) return null;
+  return (ex.hasBaseResistance ? ex.baseResistance ?? 0 : 0) + kg;
 }
 
 export function bestEffectiveWeight(ex: Exercise): number | null {
@@ -24,9 +19,9 @@ export function bestEffectiveWeight(ex: Exercise): number | null {
 export function exerciseVolume(ex: Exercise): number {
   let total = 0;
   for (const s of ex.sets) {
-    const w = asNumber(s.weight);
-    const r = asNumber(s.reps);
-    if (w !== null && r !== null && w > 0 && r > 0) total += w * r;
+    const kg = weightToKg(s.weight);
+    const reps = parseCount(s.reps);
+    if (kg !== null && reps !== null && kg > 0 && reps > 0) total += kg * reps;
   }
   return total;
 }

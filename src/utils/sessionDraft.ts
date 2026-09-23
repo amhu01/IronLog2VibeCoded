@@ -3,7 +3,7 @@ import type { Exercise, SetEntry } from '../types';
 export interface DraftSet {
   weight: string;
   reps: string;
-  rir: boolean;
+  ws: boolean;
 }
 
 export interface DraftExercise {
@@ -22,8 +22,8 @@ export function nextKey(): string {
   return `ex-${Date.now()}-${keyCounter}`;
 }
 
-export function makeDraftSet(weight: string = '', reps: string = '', rir: boolean = false): DraftSet {
-  return { weight, reps, rir };
+export function makeDraftSet(weight: string = '', reps: string = '', ws: boolean = false): DraftSet {
+  return { weight, reps, ws };
 }
 
 export function makeDraftExercise(name: string): DraftExercise {
@@ -48,7 +48,7 @@ export function exerciseToDraft(ex: Exercise): DraftExercise {
     baseResistance: ex.baseResistance !== undefined ? String(ex.baseResistance) : '',
     sets:
       ex.sets.length > 0
-        ? ex.sets.map((s) => makeDraftSet(String(s.weight ?? ''), String(s.reps ?? ''), !!s.rir))
+        ? ex.sets.map((s) => makeDraftSet(String(s.weight ?? ''), String(s.reps ?? ''), !!s.ws))
         : [makeDraftSet()],
   };
 }
@@ -65,7 +65,7 @@ export function draftsToExercises(drafts: DraftExercise[]): Exercise[] {
     .map((d) => {
       const sets: SetEntry[] = d.sets
         .filter((s) => s.weight.trim() !== '' || s.reps.trim() !== '')
-        .map((s) => ({ weight: parseSetValue(s.weight), reps: parseSetValue(s.reps), rir: s.rir }));
+        .map((s) => ({ weight: parseSetValue(s.weight), reps: parseSetValue(s.reps), ws: s.ws }));
       const exercise: Exercise = { name: d.name.trim().toUpperCase(), sets };
       const muscleGroup = d.muscleGroup.trim().toUpperCase();
       const machine = d.machine.trim().toUpperCase();

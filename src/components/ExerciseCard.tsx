@@ -60,7 +60,13 @@ export function ExerciseCard({ index, exercise, machineSuggestions, onChange, on
       </View>
 
       <Text style={styles.fieldLabel}>MUSCLE GROUP</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.chipsScroll}
+        contentContainerStyle={styles.chips}
+        keyboardShouldPersistTaps="handled"
+      >
         {MUSCLE_GROUPS.map((g) => {
           const active = exercise.muscleGroup === g;
           return (
@@ -207,13 +213,19 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: spacing.xs + 2,
   },
+  chipsScroll: {
+    flexGrow: 0,
+    flexShrink: 0,
+    marginBottom: spacing.md,
+  },
   chips: {
     gap: spacing.xs,
-    paddingBottom: spacing.md,
+    alignItems: 'center',
   },
   chip: {
+    height: 32,
+    justifyContent: 'center',
     paddingHorizontal: spacing.sm + 4,
-    paddingVertical: spacing.xs + 2,
     borderRadius: radius.pill,
     backgroundColor: colors.surfaceAlt,
     borderWidth: 1,
