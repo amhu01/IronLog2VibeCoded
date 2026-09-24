@@ -12,11 +12,14 @@ const ORANGE = '#ff8a3d';
 const ORANGE_LIGHT = '#ffb27a';
 const WHITE = '#ffffff';
 
-// Word cloud sizing: bigger word = more sets on that exercise.
-const WORD_MIN = 28;
-const WORD_MAX = 66;
-const WORD_GAP = 28;
-const LINE_RATIO = 1.32;
+// Word cloud: bigger = more work done (sets, then volume); every third word runs vertically.
+const WORD_MIN = 30;
+const WORD_MAX = 80;
+const CAP_HEIGHT = 0.74; // names are all caps, so the ink box is cap height with no descenders
+const LINE_ADVANCE = 0.98;
+const BOX_PAD = 12;
+const MAX_VERTICAL = 420; // a vertical word longer than this towers over the rest of the card
+const MAX_SCALE_UP = 1.4;
 
 /**
  * Rough advance width; SVG has no text metrics, so boxes are sized from character
@@ -37,67 +40,145 @@ function truncateToWidth(text: string, fontSize: number, weight: number, maxWidt
 }
 
 interface CloudWord {
-  text: string;
+  lines: string[];
   size: number;
   isPR: boolean;
-  x: number;
-  baseline: number;
+  cx: number;
+  cy: number;
+  vertical: boolean;
+  opacity: number;
+}
+
+interface Box {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+function splitInTwo(text: string): string[] {
+  const spaces = [...text.matchAll(/ /g)].map((m) => m.index ?? 0);
+  if (spaces.length === 0) return [text];
+  const mid = text.length / 2;
+  const at = spaces.reduce((best, i) => (Math.abs(i - mid) < Math.abs(best - mid) ? i : best), spaces[0]);
+  return [text.slice(0, at), text.slice(at + 1)];
 }
 
 /**
- * Centre-packed tag cloud of exercise names — no weights or reps, and it grows by
- * wrapping rather than truncating, so a long session still shows every lift.
+ * Wordle-style cloud: words are placed biggest first, each walking an elliptical
+ * spiral out from the centre until its bounding box clears everything already
+ * placed. The finished cloud is then scaled to the card width, so it grows rather
+ * than dropping lifts however many there are.
  */
 function layoutCloud(exercises: SummaryExercise[]): { words: CloudWord[]; height: number } {
   if (exercises.length === 0) return { words: [], height: 0 };
 
-  const counts = exercises.map((e) => Math.max(1, e.setCount));
-  const min = Math.min(...counts);
-  const max = Math.max(...counts);
-  const sizeFor = (count: number) =>
-    max === min ? Math.round((WORD_MIN + WORD_MAX) / 2) : Math.round(WORD_MIN + ((count - min) / (max - min)) * (WORD_MAX - WORD_MIN));
+  // Rank rather than raw set count: when every lift has 3 sets, sizing by value
+  // would make them all identical; ranking still gives the cloud a hero word.
+  const ranked = exercises
+    .map((ex, i) => ({ ex, i }))
+    .sort((a, b) => b.ex.setCount - a.ex.setCount || b.ex.volume - a.ex.volume || a.i - b.i);
+  const n = ranked.length;
 
-  const items = exercises.map((ex) => {
-    let size = sizeFor(Math.max(1, ex.setCount));
+  const placed: (CloudWord & { box: Box })[] = [];
+  let verticalCandidates = 0;
+  ranked.forEach(({ ex }, rank) => {
+    const t = n === 1 ? 0 : rank / (n - 1);
+    let size = Math.round(WORD_MAX - (WORD_MAX - WORD_MIN) * Math.pow(t, 0.75));
+    let lines = [ex.name];
     let width = textWidth(ex.name, size, 800);
-    if (width > CONTENT_WIDTH) {
-      size = Math.max(20, Math.floor((size * CONTENT_WIDTH) / width));
-      width = textWidth(ex.name, size, 800);
+    // Exercise names are phrases, and long thin strips stack like a list instead of
+    // interlocking. Breaking them into squarer two-line blocks lets them pack.
+    if (width > CONTENT_WIDTH * 0.42 && ex.name.includes(' ')) {
+      lines = splitInTwo(ex.name);
+      width = Math.max(...lines.map((l) => textWidth(l, size, 800)));
     }
-    return { text: ex.name, size, isPR: ex.isPR, width };
+    if (width > CONTENT_WIDTH * 0.92) {
+      size = Math.max(20, Math.floor((size * CONTENT_WIDTH * 0.92) / width));
+      width = Math.max(...lines.map((l) => textWidth(l, size, 800)));
+    }
+    const inkHeight = size * CAP_HEIGHT + (lines.length - 1) * size * LINE_ADVANCE;
+    // Turn every other short, single-line name on its side (never the hero word).
+    const canTurn = rank > 0 && lines.length === 1 && width <= MAX_VERTICAL;
+    const vertical = canTurn && verticalCandidates++ % 2 === 0;
+    const bw = (vertical ? inkHeight : width) + BOX_PAD;
+    const bh = (vertical ? width : inkHeight) + BOX_PAD;
+
+    const startAngle = rank * 2.39996; // golden angle: spreads successive words around the centre
+    let cx = 0;
+    let cy = 0;
+    for (let step = 0; step < 20000; step++) {
+      const theta = step * 0.12;
+      const r = 3.2 * theta;
+      cx = r * Math.cos(theta + startAngle);
+      cy = r * Math.sin(theta + startAngle) * 0.4; // strongly flattened: try beside the hero before above/below
+      const x0 = cx - bw / 2;
+      const y0 = cy - bh / 2;
+      const x1 = cx + bw / 2;
+      const y1 = cy + bh / 2;
+      if (!placed.some((p) => x0 < p.box.x1 && x1 > p.box.x0 && y0 < p.box.y1 && y1 > p.box.y0)) break;
+    }
+    placed.push({
+      lines,
+      size,
+      isPR: ex.isPR,
+      cx,
+      cy,
+      vertical,
+      opacity: ex.isPR ? 1 : 1 - 0.38 * t,
+      box: { x0: cx - bw / 2, y0: cy - bh / 2, x1: cx + bw / 2, y1: cy + bh / 2 },
+    });
   });
 
-  const words: CloudWord[] = [];
-  let row: typeof items = [];
-  let rowWidth = 0;
-  let y = 0;
+  const minX = Math.min(...placed.map((p) => p.box.x0));
+  const maxX = Math.max(...placed.map((p) => p.box.x1));
+  const minY = Math.min(...placed.map((p) => p.box.y0));
+  const maxY = Math.max(...placed.map((p) => p.box.y1));
+  const scale = Math.min(MAX_SCALE_UP, CONTENT_WIDTH / (maxX - minX));
+  const midX = (minX + maxX) / 2;
 
-  const flushRow = () => {
-    if (row.length === 0) return;
-    const tallest = Math.max(...row.map((i) => i.size));
-    let x = PAD + (CONTENT_WIDTH - rowWidth) / 2;
-    for (const item of row) {
-      words.push({ text: item.text, size: item.size, isPR: item.isPR, x, baseline: y + tallest * 0.92 });
-      x += item.width + WORD_GAP;
-    }
-    y += tallest * LINE_RATIO;
-    row = [];
-    rowWidth = 0;
+  return {
+    words: placed.map(({ box: _box, ...w }) => ({
+      ...w,
+      size: w.size * scale,
+      cx: PAD + CONTENT_WIDTH / 2 + (w.cx - midX) * scale,
+      cy: (w.cy - minY) * scale,
+    })),
+    height: (maxY - minY) * scale,
   };
+}
 
-  for (const item of items) {
-    const candidate = row.length === 0 ? item.width : rowWidth + WORD_GAP + item.width;
-    if (row.length > 0 && candidate > CONTENT_WIDTH) {
-      flushRow();
-      rowWidth = item.width;
-    } else {
-      rowWidth = candidate;
-    }
-    row.push(item);
-  }
-  flushRow();
-
-  return { words, height: y };
+/** A cloud word (one or two lines, optionally rotated) with its drop shadow. */
+function CloudText({ word, offsetY }: { word: CloudWord; offsetY: number }) {
+  const cy = word.cy + offsetY;
+  const capHeight = word.size * CAP_HEIGHT;
+  const advance = word.size * LINE_ADVANCE;
+  const inkHeight = capHeight + (word.lines.length - 1) * advance;
+  const firstBaseline = cy - inkHeight / 2 + capHeight;
+  const rotate = word.vertical ? `rotate(-90, ${word.cx}, ${cy})` : undefined;
+  const glyphs = (fill: string, opacity: number) =>
+    word.lines.map((line, i) => (
+      <SvgText
+        key={i}
+        x={word.cx}
+        y={firstBaseline + i * advance}
+        fontSize={word.size}
+        fontWeight="800"
+        textAnchor="middle"
+        fill={fill}
+        opacity={opacity}
+      >
+        {line}
+      </SvgText>
+    ));
+  return (
+    <G>
+      <G transform="translate(0, 3)">
+        <G transform={rotate}>{glyphs('#000000', 0.5 * word.opacity)}</G>
+      </G>
+      <G transform={rotate}>{glyphs(word.isPR ? ORANGE : WHITE, word.opacity)}</G>
+    </G>
+  );
 }
 
 interface Pill {
@@ -297,17 +378,7 @@ export const ShareCard = forwardRef<React.ElementRef<typeof Svg>, ShareCardProps
       <Rect x={PAD} y={L.dividerY} width={CONTENT_WIDTH} height={2} fill={WHITE} opacity={0.28} />
 
       {L.cloud.words.map((word, i) => (
-        <Shadowed
-          key={`${word.text}-${i}`}
-          x={word.x}
-          y={L.cloudY + word.baseline}
-          fontSize={word.size}
-          fontWeight="800"
-          fill={word.isPR ? ORANGE : WHITE}
-          opacity={word.isPR ? 1 : 0.9}
-        >
-          {word.text}
-        </Shadowed>
+        <CloudText key={`${word.lines.join(' ')}-${i}`} word={word} offsetY={L.cloudY} />
       ))}
 
       <Barbell x={PAD} y={L.footerY - 22} scale={0.62} />

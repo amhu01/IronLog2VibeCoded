@@ -156,6 +156,27 @@ Run: `npx expo start` then open in Expo Go. Typecheck: `npx tsc --noEmit`.
      an integer (fractional row heights otherwise produce a non-integer height
      that rasterisers reject). The in-app "Breakdown" card below the preview
      still lists full per-exercise detail — only the shared image changed.
+   - v7 (2026-09-24): the row-packed cloud became a **Wordle-style spiral
+     cloud** on request ("shaped like something or some words vertical — make
+     it hip"). `layoutCloud` places words biggest-first; each walks an
+     elliptical Archimedean spiral (golden-angle start per word, y squashed to
+     0.4 so it tries positions *beside* the hero before above/below) until its
+     bounding box clears everything placed, then the finished cloud is scaled to
+     the card width (up to 1.4×). Details that matter:
+     • size is by **rank** (set count, then volume, then session order), not raw
+       set count — when every lift has 3 sets, value-sizing made them identical;
+       rank always yields a hero word. Smaller words fade to ~62% opacity.
+     • multi-word names wider than 42% of the card split into two-line blocks.
+       First attempt kept names on one line and it just re-stacked into a list:
+       exercise names are phrases, and long thin strips can't interlock.
+       Squarer blocks pack like bricks.
+     • every other *short single-line* name is rotated −90° (never the hero,
+       never longer than 420 px), via `transform="rotate(-90, cx, cy)"` strings,
+       which react-native-svg parses on device. Text is `textAnchor="middle"` so
+       width-estimate error splits evenly both sides.
+     • a shape mask (e.g. barbell/dumbbell silhouette) was considered and NOT
+       done: masks need many short words to read as a shape, and with 4–7 long
+       phrase names they either fail to fill the shape or force everything tiny.
    - v5 (2026-09-23): four actions — **Copy image** (`expo-clipboard`
      `setImageAsync(base64)`, the Strava-style "copy" ask), Share image, Copy
      text, Share text — with an inline confirmation pill. `captureBase64()` is
@@ -499,6 +520,20 @@ confirmed all 3 persisted correctly with exact same values.")
   pushed two muscle-group pills off the row, so pills now wrap instead of being
   dropped (all 6 show). Final: 14 exercises + 6 pills in 1080×1386, every lift
   visible, PRs orange, sizes tracking set count.
+
+- Spiral cloud verified visually (2026-09-24): rendered 4 cases (5 lifts, 6
+  lifts all at 3 sets, 14 lifts + 6 groups + a 43-char name, 1 lift) over
+  near-white. Took three iterations, each judged by looking at the output:
+  v1 (single-line names, y×0.58) was a stacked list with one vertical word
+  stranded at the edge; v2 (two-line blocks) was a narrow centred column using
+  half the width because each block was wider than half the card; v3 (spiral
+  y×0.4, scale-up 1.4) interlocks properly — hero centred, neighbours on both
+  sides, vertical words on the flanks, PRs orange. The 14-lift card shrank from
+  1386 px to 1154 px tall. The 6-lifts-at-3-sets case still has a clear hero
+  thanks to rank sizing. Also: this session's scratchpad was wiped mid-task and
+  a failed `cd` made esbuild/sharp write `sharecard.js` and four PNGs into the
+  repo root — caught via `git status`, removed, and the harness now writes with
+  absolute / `__dirname` paths. Always `git status` after scratch runs.
 
 ## Blockers / known issues
 
