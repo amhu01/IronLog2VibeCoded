@@ -5,11 +5,11 @@ import * as Clipboard from 'expo-clipboard';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, Share, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import type Svg from 'react-native-svg';
 import { Button } from '../components/Button';
 import { Card, CardTitle } from '../components/Card';
-import { CARD_WIDTH, ShareCard, cardHeight } from '../components/ShareCard';
+import { CARD_WIDTH, ShareCard, cardHeight, prepareCard } from '../components/ShareCard';
 import { getSessionSummary } from '../db/repository';
 import type { HistoryStackParamList } from '../navigation/types';
 import { colors, fontSize, radius, spacing } from '../theme';
@@ -43,6 +43,7 @@ export function SessionSummaryScreen({ route }: Props) {
   const [busy, setBusy] = useState<'share' | 'copy' | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [scrim, setScrim] = useState(true);
+  const [cardReadyFor, setCardReadyFor] = useState<SessionSummary | null>(null);
   const svgRef = useRef<React.ElementRef<typeof Svg> | null>(null);
   const { width: screenWidth } = useWindowDimensions();
 
@@ -51,6 +52,17 @@ export function SessionSummaryScreen({ route }: Props) {
       getSessionSummary(sessionId).then(setSummary);
     }, [sessionId])
   );
+
+  // The dumbbell layout is a real search (~1 s on Hermes for a big session), so let
+  // the screen paint first and build the card on the next tick instead of in render.
+  useEffect(() => {
+    if (!summary) return;
+    const id = setTimeout(() => {
+      prepareCard(summary);
+      setCardReadyFor(summary);
+    }, 60);
+    return () => clearTimeout(id);
+  }, [summary]);
 
   useEffect(() => {
     if (!status) return;
@@ -143,7 +155,8 @@ export function SessionSummaryScreen({ route }: Props) {
 
   const previewWidth = screenWidth - spacing.md * 2 - spacing.md * 2;
   const scale = previewWidth / CARD_WIDTH;
-  const fullHeight = cardHeight(summary);
+  const cardReady = cardReadyFor === summary;
+  const fullHeight = cardReady ? cardHeight(summary) : CARD_WIDTH * 1.12;
 
   return (
     <View style={styles.container}>
@@ -173,20 +186,29 @@ export function SessionSummaryScreen({ route }: Props) {
               : 'Fully transparent PNG. Best over a dark photo; white text can disappear on a light one.'}
           </Text>
           <View style={styles.previewFrame}>
-            <View style={[styles.checkerboard, { height: fullHeight * scale }]}>
-              {Array.from({ length: Math.ceil((fullHeight * scale) / 24) }).map((_, row) => (
-                <View key={row} style={styles.checkRow}>
-                  {Array.from({ length: Math.ceil(previewWidth / 24) }).map((__, col) => (
-                    <View key={col} style={[styles.checkCell, (row + col) % 2 === 0 && styles.checkCellAlt]} />
+            {cardReady ? (
+              <>
+                <View style={[styles.checkerboard, { height: fullHeight * scale }]}>
+                  {Array.from({ length: Math.ceil((fullHeight * scale) / 24) }).map((_, row) => (
+                    <View key={row} style={styles.checkRow}>
+                      {Array.from({ length: Math.ceil(previewWidth / 24) }).map((__, col) => (
+                        <View key={col} style={[styles.checkCell, (row + col) % 2 === 0 && styles.checkCellAlt]} />
+                      ))}
+                    </View>
                   ))}
                 </View>
-              ))}
-            </View>
-            <View style={[styles.previewClip, { width: previewWidth, height: fullHeight * scale }]}>
-              <View style={{ width: CARD_WIDTH, height: fullHeight, transform: [{ scale }], transformOrigin: 'top left' }}>
-                <ShareCard ref={svgRef} summary={summary} width={CARD_WIDTH} height={fullHeight} scrim={scrim} />
+                <View style={[styles.previewClip, { width: previewWidth, height: fullHeight * scale }]}>
+                  <View style={{ width: CARD_WIDTH, height: fullHeight, transform: [{ scale }], transformOrigin: 'top left' }}>
+                    <ShareCard ref={svgRef} summary={summary} width={CARD_WIDTH} height={fullHeight} scrim={scrim} />
+                  </View>
+                </View>
+              </>
+            ) : (
+              <View style={[styles.building, { height: fullHeight * scale }]}>
+                <ActivityIndicator color={colors.primary} />
+                <Text style={styles.buildingText}>Building your card…</Text>
               </View>
-            </View>
+            )}
           </View>
         </Card>
 
@@ -199,10 +221,10 @@ export function SessionSummaryScreen({ route }: Props) {
           )}
           <View style={styles.actionRow}>
             <View style={styles.actionCell}>
-              <Button title="Copy image" icon="copy-outline" onPress={handleCopyImage} loading={busy === 'copy'} />
+              <Button title="Copy image" icon="copy-outline" onPress={handleCopyImage} loading={busy === 'copy'} disabled={!cardReady} />
             </View>
             <View style={styles.actionCell}>
-              <Button title="Share image" variant="secondary" icon="share-outline" onPress={handleShareImage} loading={busy === 'share'} />
+              <Button title="Share image" variant="secondary" icon="share-outline" onPress={handleShareImage} loading={busy === 'share'} disabled={!cardReady} />
             </View>
           </View>
           <View style={styles.gap} />
@@ -319,6 +341,17 @@ const styles = StyleSheet.create({
   },
   checkCellAlt: {
     backgroundColor: '#171a22',
+  },
+  building: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surfaceAlt,
+  },
+  buildingText: {
+    color: colors.textMuted,
+    fontSize: fontSize.small,
+    fontWeight: '700',
   },
   previewClip: {
     overflow: 'hidden',

@@ -12,14 +12,22 @@ const ORANGE = '#ff8a3d';
 const ORANGE_LIGHT = '#ffb27a';
 const WHITE = '#ffffff';
 
-// Word cloud: bigger = more work done (sets, then volume); every third word runs vertically.
-const WORD_MIN = 30;
-const WORD_MAX = 80;
+// Dumbbell word art: every lift once (big, sized by work done), then repeated as faint
+// filler until the words alone trace the dumbbell. No outline is drawn.
+const DUMBBELL_HEIGHT = 470;
+const WORD_MIN = 26;
+const WORD_MAX = 96;
+const HARD_MIN = 12;
+const FILL_SIZES = [40, 34, 29, 25, 21, 18, 15, 13, 11];
+const MAX_WORDS = 260;
+// Cloud words are stretched to their box with textLength, so this only sets each
+// word's aspect ratio. It sits between Roboto (~0.62) and wide serifs (~0.78) so the
+// stretch is small on any font.
+const NATURAL_CHAR = 0.7;
+const LOCKUP_GAP = 0.16;
+const CELL = 6; // raster resolution for the fit test, in card px (finer costs time on Hermes)
 const CAP_HEIGHT = 0.74; // names are all caps, so the ink box is cap height with no descenders
 const LINE_ADVANCE = 0.98;
-const BOX_PAD = 12;
-const MAX_VERTICAL = 420; // a vertical word longer than this towers over the rest of the card
-const MAX_SCALE_UP = 1.4;
 
 /**
  * Rough advance width; SVG has no text metrics, so boxes are sized from character
@@ -39,14 +47,22 @@ function truncateToWidth(text: string, fontSize: number, weight: number, maxWidt
   return `${out.trimEnd()}…`;
 }
 
-interface CloudWord {
-  lines: string[];
+interface CloudLine {
+  text: string;
   size: number;
+}
+
+interface CloudWord {
+  lines: CloudLine[];
+  /** Ink width every line is stretched to (textLength). */
+  width: number;
   isPR: boolean;
   cx: number;
   cy: number;
   vertical: boolean;
   opacity: number;
+  /** A repeat used only to fill out the silhouette. */
+  filler: boolean;
 }
 
 interface Box {
@@ -64,113 +80,260 @@ function splitInTwo(text: string): string[] {
   return [text.slice(0, at), text.slice(at + 1)];
 }
 
-/**
- * Wordle-style cloud: words are placed biggest first, each walking an elliptical
- * spiral out from the centre until its bounding box clears everything already
- * placed. The finished cloud is then scaled to the card width, so it grows rather
- * than dropping lifts however many there are.
- */
-function layoutCloud(exercises: SummaryExercise[]): { words: CloudWord[]; height: number } {
-  if (exercises.length === 0) return { words: [], height: 0 };
-
-  // Rank rather than raw set count: when every lift has 3 sets, sizing by value
-  // would make them all identical; ranking still gives the cloud a hero word.
-  const ranked = exercises
-    .map((ex, i) => ({ ex, i }))
-    .sort((a, b) => b.ex.setCount - a.ex.setCount || b.ex.volume - a.ex.volume || a.i - b.i);
-  const n = ranked.length;
-
-  const placed: (CloudWord & { box: Box })[] = [];
-  let verticalCandidates = 0;
-  ranked.forEach(({ ex }, rank) => {
-    const t = n === 1 ? 0 : rank / (n - 1);
-    let size = Math.round(WORD_MAX - (WORD_MAX - WORD_MIN) * Math.pow(t, 0.75));
-    let lines = [ex.name];
-    let width = textWidth(ex.name, size, 800);
-    // Exercise names are phrases, and long thin strips stack like a list instead of
-    // interlocking. Breaking them into squarer two-line blocks lets them pack.
-    if (width > CONTENT_WIDTH * 0.42 && ex.name.includes(' ')) {
-      lines = splitInTwo(ex.name);
-      width = Math.max(...lines.map((l) => textWidth(l, size, 800)));
-    }
-    if (width > CONTENT_WIDTH * 0.92) {
-      size = Math.max(20, Math.floor((size * CONTENT_WIDTH * 0.92) / width));
-      width = Math.max(...lines.map((l) => textWidth(l, size, 800)));
-    }
-    const inkHeight = size * CAP_HEIGHT + (lines.length - 1) * size * LINE_ADVANCE;
-    // Turn every other short, single-line name on its side (never the hero word).
-    const canTurn = rank > 0 && lines.length === 1 && width <= MAX_VERTICAL;
-    const vertical = canTurn && verticalCandidates++ % 2 === 0;
-    const bw = (vertical ? inkHeight : width) + BOX_PAD;
-    const bh = (vertical ? width : inkHeight) + BOX_PAD;
-
-    const startAngle = rank * 2.39996; // golden angle: spreads successive words around the centre
-    let cx = 0;
-    let cy = 0;
-    for (let step = 0; step < 20000; step++) {
-      const theta = step * 0.12;
-      const r = 3.2 * theta;
-      cx = r * Math.cos(theta + startAngle);
-      cy = r * Math.sin(theta + startAngle) * 0.4; // strongly flattened: try beside the hero before above/below
-      const x0 = cx - bw / 2;
-      const y0 = cy - bh / 2;
-      const x1 = cx + bw / 2;
-      const y1 = cy + bh / 2;
-      if (!placed.some((p) => x0 < p.box.x1 && x1 > p.box.x0 && y0 < p.box.y1 && y1 > p.box.y0)) break;
-    }
-    placed.push({
-      lines,
-      size,
-      isPR: ex.isPR,
-      cx,
-      cy,
-      vertical,
-      opacity: ex.isPR ? 1 : 1 - 0.38 * t,
-      box: { x0: cx - bw / 2, y0: cy - bh / 2, x1: cx + bw / 2, y1: cy + bh / 2 },
-    });
-  });
-
-  const minX = Math.min(...placed.map((p) => p.box.x0));
-  const maxX = Math.max(...placed.map((p) => p.box.x1));
-  const minY = Math.min(...placed.map((p) => p.box.y0));
-  const maxY = Math.max(...placed.map((p) => p.box.y1));
-  const scale = Math.min(MAX_SCALE_UP, CONTENT_WIDTH / (maxX - minX));
-  const midX = (minX + maxX) / 2;
-
-  return {
-    words: placed.map(({ box: _box, ...w }) => ({
-      ...w,
-      size: w.size * scale,
-      cx: PAD + CONTENT_WIDTH / 2 + (w.cx - midX) * scale,
-      cy: (w.cy - minY) * scale,
-    })),
-    height: (maxY - minY) * scale,
-  };
+/** The silhouette as rectangles: outer plate, inner plate, collar per side, plus the handle. */
+function dumbbellRects(w: number, h: number): Box[] {
+  const outerW = 0.096 * w;
+  const gap = 0.011 * w;
+  const innerW = 0.139 * w;
+  const collarW = 0.026 * w;
+  const centred = (height: number) => ({ y0: (h - height) / 2, y1: (h + height) / 2 });
+  const mirror = (b: Box): Box => ({ x0: w - b.x1, y0: b.y0, x1: w - b.x0, y1: b.y1 });
+  const outer = { x0: 0, x1: outerW, ...centred(0.66 * h) };
+  const inner = { x0: outerW + gap, x1: outerW + gap + innerW, y0: 0, y1: h };
+  const collar = { x0: inner.x1, x1: inner.x1 + collarW, ...centred(0.34 * h) };
+  const handle = { x0: collar.x1, x1: w - collar.x1, ...centred(0.24 * h) };
+  return [outer, mirror(outer), inner, mirror(inner), collar, mirror(collar), handle];
 }
 
-/** A cloud word (one or two lines, optionally rotated) with its drop shadow. */
+/**
+ * Free-space raster of the shape with a summed-area table, so "does this box sit
+ * entirely on free cells inside the dumbbell?" is four lookups instead of a scan.
+ */
+class ShapeGrid {
+  readonly gw: number;
+  readonly gh: number;
+  private free: Uint8Array;
+  private sat: Int32Array;
+  private order: number[];
+  /** Box sizes already proven not to fit. Free space only shrinks, so these never fit later either. */
+  private failed: { bw: number; bh: number }[] = [];
+
+  constructor(width: number, height: number, shape: Box[]) {
+    this.gw = Math.floor(width / CELL);
+    this.gh = Math.floor(height / CELL);
+    this.free = new Uint8Array(this.gw * this.gh);
+    for (let gy = 0; gy < this.gh; gy++) {
+      for (let gx = 0; gx < this.gw; gx++) {
+        const x = (gx + 0.5) * CELL;
+        const y = (gy + 0.5) * CELL;
+        if (shape.some((b) => x >= b.x0 && x < b.x1 && y >= b.y0 && y < b.y1)) this.free[gy * this.gw + gx] = 1;
+      }
+    }
+    this.sat = new Int32Array((this.gw + 1) * (this.gh + 1));
+    this.rebuild();
+    // Candidate centres every other cell, nearest the middle first. Every cell
+    // would pack marginally tighter at 4x the cost, and this runs on Hermes.
+    const cx = this.gw / 2;
+    const cy = this.gh / 2;
+    const cells: number[] = [];
+    for (let gy = 0; gy < this.gh; gy += 2) for (let gx = 0; gx < this.gw; gx += 2) cells.push(gy * this.gw + gx);
+    const dist = (i: number) => (i % this.gw - cx) ** 2 + (Math.floor(i / this.gw) - cy) ** 2;
+    this.order = cells.sort((a, b) => dist(a) - dist(b));
+  }
+
+  /** Rows above `fromRow` can't have changed, so their prefix sums are reused. */
+  private rebuild(fromRow = 0) {
+    const W = this.gw + 1;
+    for (let gy = fromRow; gy < this.gh; gy++) {
+      let row = 0;
+      for (let gx = 0; gx < this.gw; gx++) {
+        row += this.free[gy * this.gw + gx];
+        this.sat[(gy + 1) * W + gx + 1] = this.sat[gy * W + gx + 1] + row;
+      }
+    }
+  }
+
+  private cellRange(b: Box) {
+    return { x0: Math.floor(b.x0 / CELL), y0: Math.floor(b.y0 / CELL), x1: Math.ceil(b.x1 / CELL), y1: Math.ceil(b.y1 / CELL) };
+  }
+
+  fits(b: Box): boolean {
+    const r = this.cellRange(b);
+    if (r.x0 < 0 || r.y0 < 0 || r.x1 > this.gw || r.y1 > this.gh) return false;
+    const W = this.gw + 1;
+    const sum = this.sat[r.y1 * W + r.x1] - this.sat[r.y0 * W + r.x1] - this.sat[r.y1 * W + r.x0] + this.sat[r.y0 * W + r.x0];
+    return sum === (r.x1 - r.x0) * (r.y1 - r.y0);
+  }
+
+  occupy(b: Box) {
+    const r = this.cellRange(b);
+    for (let gy = Math.max(0, r.y0); gy < Math.min(this.gh, r.y1); gy++)
+      for (let gx = Math.max(0, r.x0); gx < Math.min(this.gw, r.x1); gx++) this.free[gy * this.gw + gx] = 0;
+    this.rebuild(Math.max(0, r.y0));
+  }
+
+  /** Free spot for a bw×bh box nearest the middle, as a centre point, or null. */
+  findSpot(bw: number, bh: number): { cx: number; cy: number; rank: number } | null {
+    if (this.failed.some((f) => bw >= f.bw && bh >= f.bh)) return null;
+    for (let k = 0; k < this.order.length; k++) {
+      const i = this.order[k];
+      const cx = (i % this.gw + 0.5) * CELL;
+      const cy = (Math.floor(i / this.gw) + 0.5) * CELL;
+      if (this.fits({ x0: cx - bw / 2, y0: cy - bh / 2, x1: cx + bw / 2, y1: cy + bh / 2 })) return { cx, cy, rank: k };
+    }
+    this.failed.push({ bw, bh });
+    return null;
+  }
+}
+
+interface Shaped {
+  lines: CloudLine[];
+  width: number;
+  vertical: boolean;
+  bw: number;
+  bh: number;
+}
+
+function inkHeight(lines: CloudLine[]): number {
+  return lines.reduce((h, l, i) => h + l.size * CAP_HEIGHT + (i > 0 ? lines[0].size * LOCKUP_GAP : 0), 0);
+}
+
+/**
+ * Every way a name can be set at a size: one line, or a two-line poster lockup
+ * where the shorter word is scaled up to the longer one's width (a huge "LAT" over
+ * "PULLDOWN") so the block is a solid rectangle — each one flat or on its side.
+ */
+function shapesFor(name: string, size: number): Shaped[] {
+  const pad = Math.max(3, size * 0.1);
+  const variants: { lines: CloudLine[]; width: number }[] = [
+    { lines: [{ text: name, size }], width: name.length * size * NATURAL_CHAR },
+  ];
+  if (name.includes(' ')) {
+    const parts = splitInTwo(name);
+    const longest = Math.max(...parts.map((t) => t.length));
+    const width = longest * size * NATURAL_CHAR;
+    variants.push({
+      lines: parts.map((text) => ({ text, size: Math.min(size * 2.4, width / (text.length * NATURAL_CHAR)) })),
+      width,
+    });
+  }
+  const out: Shaped[] = [];
+  for (const v of variants) {
+    const ink = inkHeight(v.lines);
+    out.push({ ...v, vertical: false, bw: v.width + pad, bh: ink + pad });
+    out.push({ ...v, vertical: true, bw: ink + pad, bh: v.width + pad });
+  }
+  return out;
+}
+
+function tryPlace(grid: ShapeGrid, name: string, size: number) {
+  let best: (Shaped & { cx: number; cy: number; rank: number }) | null = null;
+  for (const shape of shapesFor(name, size)) {
+    const spot = grid.findSpot(shape.bw, shape.bh);
+    if (spot && (!best || spot.rank < best.rank)) best = { ...shape, ...spot };
+  }
+  return best;
+}
+
+/**
+ * Lays the names out inside an invisible dumbbell. Each lift is placed once at
+ * the biggest size that fits (sized by rank of work done); if any lift can't fit,
+ * every target shrinks and the whole pass reruns, so no lift is ever dropped.
+ * Then names repeat as small, faint filler until nothing more fits, which is what
+ * makes the silhouette readable with only a handful of lifts.
+ */
+function layoutDumbbell(exercises: SummaryExercise[]): { words: CloudWord[]; height: number } {
+  if (exercises.length === 0) return { words: [], height: 0 };
+
+  const ranked = exercises
+    .map((ex, i) => ({ ex, i }))
+    .sort((a, b) => b.ex.setCount - a.ex.setCount || b.ex.volume - a.ex.volume || a.i - b.i)
+    .map(({ ex }) => ex);
+  const n = ranked.length;
+  const shape = dumbbellRects(CONTENT_WIDTH, DUMBBELL_HEIGHT);
+  const boxOf = (p: { cx: number; cy: number; bw: number; bh: number }): Box => ({
+    x0: p.cx - p.bw / 2,
+    y0: p.cy - p.bh / 2,
+    x1: p.cx + p.bw / 2,
+    y1: p.cy + p.bh / 2,
+  });
+
+  for (let shrink = 1; shrink > 0.2; shrink *= 0.82) {
+    const grid = new ShapeGrid(CONTENT_WIDTH, DUMBBELL_HEIGHT, shape);
+    const words: CloudWord[] = [];
+    let smallest = Infinity;
+    let allPlaced = true;
+
+    for (let rank = 0; rank < n && allPlaced; rank++) {
+      const ex = ranked[rank];
+      const t = n === 1 ? 0 : rank / (n - 1);
+      let size = (WORD_MAX - (WORD_MAX - WORD_MIN) * Math.pow(t, 0.75)) * shrink;
+      let spot = null;
+      for (; size >= HARD_MIN; size *= 0.92) {
+        spot = tryPlace(grid, ex.name, size);
+        if (spot) break;
+      }
+      if (!spot) {
+        allPlaced = false;
+        break;
+      }
+      grid.occupy(boxOf(spot));
+      smallest = Math.min(smallest, size);
+      words.push({ lines: spot.lines, width: spot.width, isPR: ex.isPR, cx: spot.cx, cy: spot.cy, vertical: spot.vertical, opacity: 1, filler: false });
+    }
+    if (!allPlaced) continue;
+
+    // Filler never competes with the real names: always smaller, always faint.
+    let next = 0;
+    for (const fillSize of FILL_SIZES.filter((f) => f < smallest * 0.95)) {
+      let misses = 0;
+      while (misses < n && words.length < MAX_WORDS) {
+        const ex = ranked[next++ % n];
+        const spot = tryPlace(grid, ex.name, fillSize);
+        if (!spot) {
+          misses++;
+          continue;
+        }
+        misses = 0;
+        grid.occupy(boxOf(spot));
+        words.push({
+          lines: spot.lines,
+          width: spot.width,
+          isPR: false,
+          cx: spot.cx,
+          cy: spot.cy,
+          vertical: spot.vertical,
+          opacity: 0.2 + 0.16 * (fillSize / FILL_SIZES[0]),
+          filler: true,
+        });
+      }
+    }
+
+    return { words: words.map((w) => ({ ...w, cx: w.cx + PAD })), height: DUMBBELL_HEIGHT };
+  }
+  return { words: [], height: DUMBBELL_HEIGHT };
+}
+
+/** A cloud word or lockup, stretched to its box and optionally rotated, with a drop shadow. */
 function CloudText({ word, offsetY }: { word: CloudWord; offsetY: number }) {
   const cy = word.cy + offsetY;
-  const capHeight = word.size * CAP_HEIGHT;
-  const advance = word.size * LINE_ADVANCE;
-  const inkHeight = capHeight + (word.lines.length - 1) * advance;
-  const firstBaseline = cy - inkHeight / 2 + capHeight;
+  const total = inkHeight(word.lines);
+  const baselines: number[] = [];
+  let top = cy - total / 2;
+  word.lines.forEach((line, i) => {
+    if (i > 0) top += word.lines[0].size * LOCKUP_GAP;
+    top += line.size * CAP_HEIGHT;
+    baselines.push(top);
+  });
   const rotate = word.vertical ? `rotate(-90, ${word.cx}, ${cy})` : undefined;
   const glyphs = (fill: string, opacity: number) =>
     word.lines.map((line, i) => (
       <SvgText
         key={i}
         x={word.cx}
-        y={firstBaseline + i * advance}
-        fontSize={word.size}
+        y={baselines[i]}
+        fontSize={line.size}
         fontWeight="800"
         textAnchor="middle"
+        textLength={word.width}
+        lengthAdjust="spacingAndGlyphs"
         fill={fill}
         opacity={opacity}
       >
-        {line}
+        {line.text}
       </SvgText>
     ));
+  if (word.filler) return <G transform={rotate}>{glyphs(WHITE, word.opacity)}</G>;
   return (
     <G>
       <G transform="translate(0, 3)">
@@ -225,13 +388,21 @@ interface Layout {
   stats: { value: string; label: string }[];
   dividerY: number;
   cloudY: number;
-  cloud: ReturnType<typeof layoutCloud>;
+  cloud: ReturnType<typeof layoutDumbbell>;
   footerY: number;
   height: number;
 }
 
-/** Single source of truth for vertical positions, so cardHeight can never drift from the render. */
+const layoutCache = new WeakMap<SessionSummary, Layout>();
+
+/**
+ * Single source of truth for vertical positions, so cardHeight can never drift from
+ * the render. Cached per summary: the dumbbell fill is a real search, and both
+ * cardHeight and every re-render (e.g. the PANEL/CLEAR toggle) ask for it.
+ */
 function computeLayout(summary: SessionSummary): Layout {
+  const cached = layoutCache.get(summary);
+  if (cached) return cached;
   const titleText = (summary.name || 'WORKOUT').toUpperCase();
   const titleSize = titleText.length > 26 ? 44 : titleText.length > 18 ? 56 : 72;
 
@@ -252,15 +423,25 @@ function computeLayout(summary: SessionSummary): Layout {
 
   const dividerY = y;
   const cloudY = y + 56;
-  const cloud = layoutCloud(summary.exercises);
+  const cloud = layoutDumbbell(summary.exercises);
 
-  // Row heights are fractional; keep the canvas an integer so the rasteriser is happy.
+  // Keep the canvas an integer so the rasteriser is happy.
   const footerY = Math.round(cloudY + cloud.height + 76);
-  return { titleSize, titleText, pillsY, pills, statsY, stats, dividerY, cloudY, cloud, footerY, height: footerY + 56 };
+  const layout = { titleSize, titleText, pillsY, pills, statsY, stats, dividerY, cloudY, cloud, footerY, height: footerY + 56 };
+  layoutCache.set(summary, layout);
+  return layout;
 }
 
 export function cardHeight(summary: SessionSummary): number {
   return computeLayout(summary).height;
+}
+
+/**
+ * Does the (cached) dumbbell layout. It's a real search, so the summary screen
+ * calls this after it has painted rather than during render.
+ */
+export function prepareCard(summary: SessionSummary): void {
+  computeLayout(summary);
 }
 
 /** White text is unreadable on a light photo, so every glyph gets a dark under-layer. */
@@ -378,7 +559,7 @@ export const ShareCard = forwardRef<React.ElementRef<typeof Svg>, ShareCardProps
       <Rect x={PAD} y={L.dividerY} width={CONTENT_WIDTH} height={2} fill={WHITE} opacity={0.28} />
 
       {L.cloud.words.map((word, i) => (
-        <CloudText key={`${word.lines.join(' ')}-${i}`} word={word} offsetY={L.cloudY} />
+        <CloudText key={`${word.lines.map((l) => l.text).join(' ')}-${i}`} word={word} offsetY={L.cloudY} />
       ))}
 
       <Barbell x={PAD} y={L.footerY - 22} scale={0.62} />

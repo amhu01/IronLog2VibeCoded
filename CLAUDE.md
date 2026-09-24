@@ -174,9 +174,37 @@ Run: `npx expo start` then open in Expo Go. Typecheck: `npx tsc --noEmit`.
        never longer than 420 px), via `transform="rotate(-90, cx, cy)"` strings,
        which react-native-svg parses on device. Text is `textAnchor="middle"` so
        width-estimate error splits evenly both sides.
-     • a shape mask (e.g. barbell/dumbbell silhouette) was considered and NOT
-       done: masks need many short words to read as a shape, and with 4–7 long
-       phrase names they either fail to fill the shape or force everything tiny.
+     • (superseded by v8) a shape mask was first judged unworkable because 4–7
+       long names can't fill a shape; v8 solves that with repeated filler.
+   - v8 (2026-09-24): the spiral cloud became **dumbbell word art** — the names
+     themselves trace a dumbbell with **no outline drawn** (Amir's exact ask).
+     `layoutDumbbell` in [ShareCard.tsx](src/components/ShareCard.tsx):
+     • `dumbbellRects` defines an invisible mask (outer plate, gap, full-height
+       inner plate, collar per side, handle), 936×470 inside the card, so the
+       card height is now fixed regardless of lift count.
+     • `ShapeGrid` rasterises it at 6 px with a summed-area table: "is this box
+       entirely on free cells inside the shape" is 4 lookups. Candidates are
+       every other cell, nearest the centre first. `failed` remembers box sizes
+       that didn't fit — free space only shrinks, so they never fit later.
+     • pass 1 places each lift once, biggest-first by rank (sets, volume, order),
+       at the largest size any of its shapes fits: one line or a two-line
+       **poster lockup** (shorter word scaled up to the longer's width — a huge
+       "LAT" over "PULLDOWN"), each flat or rotated −90°. If any lift can't fit,
+       every target shrinks ×0.82 and the pass reruns, so no lift is dropped.
+     • pass 2 repeats names as **filler** (always smaller than the smallest real
+       name, 20–36% opacity, no shadow, never orange) until nothing fits. With
+       5 lifts there are too few words to read as a shape; the filler is what
+       makes the silhouette.
+     • every word is stretched to its box with `textLength` +
+       `lengthAdjust="spacingAndGlyphs"` (supported natively on Android — see
+       `TSpanView.java`), so packing is exact on any font and the preview/phone
+       font difference stops mattering. `NATURAL_CHAR` (0.70) only sets aspect.
+     • it's a real search: ~520 ms for 14 lifts under `node --jitless` (a rough
+       Hermes proxy), so `computeLayout` is cached per summary (WeakMap) and
+       SessionSummaryScreen builds it via `prepareCard()` in a `setTimeout`
+       after first paint, showing "Building your card…" and disabling the
+       image buttons until ready. Never call `cardHeight()` during render
+       before the card is prepared.
    - v5 (2026-09-23): four actions — **Copy image** (`expo-clipboard`
      `setImageAsync(base64)`, the Strava-style "copy" ask), Share image, Copy
      text, Share text — with an inline confirmation pill. `captureBase64()` is
@@ -534,6 +562,22 @@ confirmed all 3 persisted correctly with exact same values.")
   a failed `cd` made esbuild/sharp write `sharecard.js` and four PNGs into the
   repo root — caught via `git status`, removed, and the harness now writes with
   absolute / `__dirname` paths. Always `git status` after scratch runs.
+
+- Dumbbell word art verified visually (2026-09-24): 4 cases (5 lifts, 6 lifts
+  all at 3 sets, 14 lifts with a 43-char name, 1 lift). First cut placed each
+  lift once with light filler and did read as plates + handle but looked
+  patchy. The big discovery: **librsvg (the preview renderer) ignores
+  `textLength`** — asking for 300 px or 600 px gave the same 189 px ink — so the
+  previews were showing words at natural width, not stretched to their boxes as
+  the phone will. That made an apparent MACHINE/HAMMER collision in the
+  14-lift card which was purely a preview artefact. The harness now emulates
+  `textLength` (`faithful.js`: measure each word's natural ink width with
+  sharp, then wrap it in a horizontal scale about its anchor), after which the
+  collisions vanished and edges came out crisp. All four cases read as a
+  dumbbell; the single-lift SQUAT card is unmistakable. Speed: under
+  `--jitless` the 14-lift layout went 1150 ms → 520 ms after moving the grid
+  4 → 6 px, making SAT rebuilds start at the first changed row, and pruning
+  failed box sizes; plus the deferred build so the screen never blocks.
 
 ## Blockers / known issues
 
