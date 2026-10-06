@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fontSize, radius, spacing, themed } from '../theme';
 import { t } from '../i18n';
@@ -94,17 +94,21 @@ interface SelectFieldProps {
   value: string;
   onPress: () => void;
   icon?: React.ComponentProps<typeof Ionicons>['name'];
+  /** Shown dimmed instead of `value` when nothing is chosen yet. */
+  placeholder?: string;
+  style?: StyleProp<ViewStyle>;
 }
 
 /** The closed state of a dropdown: label, current value and a chevron. */
-export function SelectField({ label, value, onPress, icon }: SelectFieldProps) {
+export function SelectField({ label, value, onPress, icon, placeholder, style }: SelectFieldProps) {
+  const empty = value === '' && placeholder !== undefined;
   return (
-    <Pressable style={({ pressed }) => [styles.field, pressed && styles.rowPressed]} onPress={onPress}>
+    <Pressable style={({ pressed }) => [styles.field, style, pressed && styles.rowPressed]} onPress={onPress}>
       {icon && <Ionicons name={icon} size={18} color={colors.primary} />}
       <View style={styles.rowText}>
         <Text style={styles.fieldLabel}>{label}</Text>
-        <Text style={styles.fieldValue} numberOfLines={1}>
-          {value}
+        <Text style={[styles.fieldValue, empty && styles.fieldPlaceholder]} numberOfLines={1}>
+          {empty ? placeholder : value}
         </Text>
       </View>
       <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
@@ -222,6 +226,9 @@ const styles = themed(() => ({
     fontSize: fontSize.tiny,
     fontWeight: '800',
     letterSpacing: 1,
+  },
+  fieldPlaceholder: {
+    color: colors.textFaint,
   },
   fieldValue: {
     color: colors.text,

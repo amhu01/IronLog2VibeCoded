@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { colors, fontSize, radius, spacing, themed } from '../theme';
 import { MUSCLE_GROUPS } from '../types';
 import { makeDraftSet, type DraftExercise, type DraftSet } from '../utils/sessionDraft';
+import { OptionSheet, SelectField } from './OptionSheet';
 import { SetRow } from './SetRow';
 import { muscleLabel, t } from '../i18n';
 
@@ -20,6 +21,7 @@ interface ExerciseCardProps {
 
 export function ExerciseCard({ index, exercise, machineSuggestions, onChange, onRemove, onMachineCommit, onFieldFocus }: ExerciseCardProps) {
   const [machineFocused, setMachineFocused] = useState(false);
+  const [pickingMuscle, setPickingMuscle] = useState(false);
   const machineY = useRef(0);
   const notesY = useRef(0);
 
@@ -64,27 +66,25 @@ export function ExerciseCard({ index, exercise, machineSuggestions, onChange, on
         </Pressable>
       </View>
 
-      <Text style={styles.fieldLabel}>{t('MUSCLE GROUP')}</Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.chipsScroll}
-        contentContainerStyle={styles.chips}
-        keyboardShouldPersistTaps="handled"
-      >
-        {MUSCLE_GROUPS.map((g) => {
-          const active = exercise.muscleGroup === g;
-          return (
-            <Pressable
-              key={g}
-              style={[styles.chip, active && styles.chipActive]}
-              onPress={() => onChange({ ...exercise, muscleGroup: active ? '' : g })}
-            >
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>{muscleLabel(g)}</Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+      <SelectField
+        label={t('MUSCLE GROUP')}
+        value={exercise.muscleGroup ? muscleLabel(exercise.muscleGroup) : ''}
+        placeholder={t('Tap to choose')}
+        icon="body-outline"
+        style={styles.muscleField}
+        onPress={() => setPickingMuscle(true)}
+      />
+      <OptionSheet
+        visible={pickingMuscle}
+        title={t('Muscle group')}
+        options={[{ value: '', label: t('None') }, ...MUSCLE_GROUPS.map((g) => ({ value: g, label: muscleLabel(g) }))]}
+        selected={exercise.muscleGroup}
+        onClose={() => setPickingMuscle(false)}
+        onSelect={(g) => {
+          onChange({ ...exercise, muscleGroup: g });
+          setPickingMuscle(false);
+        }}
+      />
 
       <View onLayout={(e) => (machineY.current = e.nativeEvent.layout.y)}>
         <Text style={styles.fieldLabel}>{t('MACHINE / BRAND (OPTIONAL)')}</Text>
@@ -245,36 +245,10 @@ const styles = themed(() => ({
     letterSpacing: 1,
     marginBottom: spacing.xs + 2,
   },
-  chipsScroll: {
-    flexGrow: 0,
-    flexShrink: 0,
-    marginBottom: spacing.md,
-  },
-  chips: {
-    gap: spacing.xs,
-    alignItems: 'center',
-  },
-  chip: {
-    height: 32,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.sm + 4,
-    borderRadius: radius.pill,
+  muscleField: {
     backgroundColor: colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  chipActive: {
-    backgroundColor: colors.primarySoft,
-    borderColor: colors.primary,
-  },
-  chipText: {
-    color: colors.textMuted,
-    fontSize: fontSize.tiny,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  chipTextActive: {
-    color: colors.primary,
+    borderRadius: radius.sm,
+    marginBottom: spacing.md,
   },
   machineWrap: {
     flexDirection: 'row',

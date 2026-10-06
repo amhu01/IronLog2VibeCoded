@@ -380,6 +380,9 @@ Run: `npx expo start` then open in Expo Go. Typecheck: `npx tsc --noEmit`.
      unsaved Log session, so LogScreen keeps its draft in a module variable
      (`unsavedDraft`, fed by SessionEditor's `onDraftChange`) — memory only,
      cleared on save or when a template is loaded.
+   - Muscle group picker (v11, on request — 17 pills was too many): each
+     ExerciseCard shows a `SelectField` that opens the `OptionSheet` (search
+     included, "None" clears it) instead of a horizontal chip row.
    - Adding UI text: wrap it in `t()`, add the Malay to `MS`, then re-run the
      coverage check (extract every `t`/`tn` key, compare with `MS`, compare
      `{placeholders}`) — see the v11 verification entry.
@@ -776,7 +779,10 @@ confirmed all 3 persisted correctly with exact same values.")
 - v11 APK verified (2026-10-06): `scripts/build-apk.sh` exit 0 (stages 50s /
   47s / 1m37s). `apksigner verify` passes; the Hermes bundle contains "Simpan
   sesi", "Bahasa Melayu", "Hitam pekat", "LENGAN BAWAH", "Kalendar latihan",
-  "Accent colour", the `ms-MY` locale and the settings-table DDL.
+  "Accent colour", the `ms-MY` locale and the settings-table DDL. Rebuilt
+  after the muscle dropdown (stages 44s / 36s / 1m24s): signed, bundle has
+  "Tap to choose" / "Tekan untuk pilih" / "Kumpulan otot"; coverage check
+  re-run at 184 keys, 0 missing.
 
 ## Blockers / known issues
 

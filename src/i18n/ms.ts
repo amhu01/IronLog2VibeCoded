@@ -99,6 +99,9 @@ export const MS: Record<string, string> = {
   WEIGHT: 'BERAT',
   REPS: 'ULANGAN',
   'Add set': 'Tambah set',
+  'Muscle group': 'Kumpulan otot',
+  'Tap to choose': 'Tekan untuk pilih',
+  None: 'Tiada',
 
   // Exercise search
   Exercises: 'Senaman',
