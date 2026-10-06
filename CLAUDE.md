@@ -654,6 +654,13 @@ confirmed all 3 persisted correctly with exact same values.")
   (was transitive; `npm ls` confirms one deduped copy, which matters because
   a second copy would have its own header context and the hook would throw).
 
+- v9 APK verified (2026-10-06): `scripts/build-apk.sh` exit 0, stages 1m53s /
+  1m08s / 4m18s (JS-only + a pure-JS dep, no prebuild). 34 MiB,
+  `apksigner verify` passes, badging `com.amirhusni.ironlog` 1.0.0. Hermes
+  bundle contains "SESSION NOTES", "LAST TIME", "Training calendar",
+  KETTLEBELL/PLATE/TROPHY/HEART, "ALL MACHINES", "Tap a day for details" and
+  `ProgressMain`; no rest-timer strings remain.
+
 ## Blockers / known issues
 
 (Document anything infeasible, any fallback taken instead of the original
