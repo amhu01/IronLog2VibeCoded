@@ -12,9 +12,8 @@ const ORANGE = '#ff8a3d';
 const ORANGE_LIGHT = '#ffb27a';
 const WHITE = '#ffffff';
 
-// Dumbbell word art: every lift once (big, sized by work done), then repeated as faint
-// filler until the words alone trace the dumbbell. No outline is drawn.
-const DUMBBELL_HEIGHT = 470;
+// Word art: every lift once (big, sized by work done), then repeated as faint filler
+// until the words alone trace a shape (dumbbell, kettlebell…). No outline is drawn.
 const WORD_MIN = 26;
 const WORD_MAX = 96;
 const HARD_MIN = 12;
@@ -80,24 +79,98 @@ function splitInTwo(text: string): string[] {
   return [text.slice(0, at), text.slice(at + 1)];
 }
 
-/** The silhouette as rectangles: outer plate, inner plate, collar per side, plus the handle. */
-function dumbbellRects(w: number, h: number): Box[] {
+export type CardShape = 'dumbbell' | 'kettlebell' | 'plate' | 'trophy' | 'heart';
+
+interface ShapeDef {
+  label: string;
+  w: number;
+  h: number;
+  /** Is the point (in shape-local px) inside the silhouette? */
+  inside: (x: number, y: number) => boolean;
+}
+
+const inEllipse = (x: number, y: number, cx: number, cy: number, rx: number, ry: number) => ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1;
+
+/** Outer plate, gap, full-height inner plate, collar per side, plus the handle. */
+function dumbbell(w: number, h: number): ShapeDef['inside'] {
   const outerW = 0.096 * w;
   const gap = 0.011 * w;
   const innerW = 0.139 * w;
   const collarW = 0.026 * w;
-  const centred = (height: number) => ({ y0: (h - height) / 2, y1: (h + height) / 2 });
-  const mirror = (b: Box): Box => ({ x0: w - b.x1, y0: b.y0, x1: w - b.x0, y1: b.y1 });
-  const outer = { x0: 0, x1: outerW, ...centred(0.66 * h) };
-  const inner = { x0: outerW + gap, x1: outerW + gap + innerW, y0: 0, y1: h };
-  const collar = { x0: inner.x1, x1: inner.x1 + collarW, ...centred(0.34 * h) };
-  const handle = { x0: collar.x1, x1: w - collar.x1, ...centred(0.24 * h) };
-  return [outer, mirror(outer), inner, mirror(inner), collar, mirror(collar), handle];
+  return (px, y) => {
+    const x = px < w / 2 ? px : w - px; // mirror: test the left half only
+    const band = (frac: number) => Math.abs(y - h / 2) < (frac * h) / 2;
+    if (x < outerW) return band(0.66);
+    if (x < outerW + gap) return false;
+    if (x < outerW + gap + innerW) return true;
+    if (x < outerW + gap + innerW + collarW) return band(0.34);
+    return band(0.24);
+  };
 }
+
+const SHAPES: Record<CardShape, ShapeDef> = {
+  dumbbell: { label: 'DUMBBELL', w: CONTENT_WIDTH, h: 470, inside: dumbbell(CONTENT_WIDTH, 470) },
+  kettlebell: {
+    label: 'KETTLEBELL',
+    w: 700,
+    h: 820,
+    // Round body with a flat base, and an arched handle whose window stays open above the body.
+    inside: (x, y) =>
+      (inEllipse(x, y, 350, 565, 255, 255) && y < 800) ||
+      (inEllipse(x, y, 350, 235, 240, 235) && !inEllipse(x, y, 350, 250, 135, 145)),
+  },
+  plate: {
+    label: 'PLATE',
+    w: 800,
+    h: 800,
+    // A bumper plate: disc, centre hole, and a groove ring that the words leave as a gap.
+    inside: (x, y) => {
+      const r = Math.hypot(x - 400, y - 400) / 400;
+      return r <= 1 && r > 0.25 && (r < 0.7 || r > 0.76);
+    },
+  },
+  trophy: {
+    label: 'TROPHY',
+    w: 760,
+    h: 800,
+    inside: (x, y) => {
+      const dx = Math.abs(x - 380);
+      // Bowl: full width at the rim, curving in to the stem.
+      if (y < 440) {
+        const half = 230 * Math.sqrt(Math.max(0, 1 - (y / 470) ** 2));
+        if (dx <= half) return true;
+        // Ring handles either side of the bowl.
+        const hx = Math.abs(dx - 230);
+        const r = Math.hypot(hx, y - 150);
+        return dx > 200 && r <= 128 && r >= 66 && y < 300;
+      }
+      if (y < 610) return dx <= 40; // stem
+      if (y < 670) return dx <= 150; // plinth top
+      return dx <= 210; // base
+    },
+  },
+  heart: {
+    label: 'HEART',
+    w: 860,
+    h: 760,
+    // (x² + y² − 1)³ − x²y³ ≤ 0, mapped so the curve's bounds fill the box.
+    inside: (px, py) => {
+      const x = (px / 860 - 0.5) * 2 * 1.14;
+      const y = 1.24 - (py / 760) * 2.26;
+      const a = x * x + y * y - 1;
+      return a * a * a - x * x * y * y * y <= 0;
+    },
+  },
+};
+
+export const CARD_SHAPES: { id: CardShape; label: string }[] = (Object.keys(SHAPES) as CardShape[]).map((id) => ({
+  id,
+  label: SHAPES[id].label,
+}));
 
 /**
  * Free-space raster of the shape with a summed-area table, so "does this box sit
- * entirely on free cells inside the dumbbell?" is four lookups instead of a scan.
+ * entirely on free cells inside the shape?" is four lookups instead of a scan.
  */
 class ShapeGrid {
   readonly gw: number;
@@ -108,7 +181,7 @@ class ShapeGrid {
   /** Box sizes already proven not to fit. Free space only shrinks, so these never fit later either. */
   private failed: { bw: number; bh: number }[] = [];
 
-  constructor(width: number, height: number, shape: Box[]) {
+  constructor(width: number, height: number, inside: ShapeDef['inside']) {
     this.gw = Math.floor(width / CELL);
     this.gh = Math.floor(height / CELL);
     this.free = new Uint8Array(this.gw * this.gh);
@@ -116,7 +189,7 @@ class ShapeGrid {
       for (let gx = 0; gx < this.gw; gx++) {
         const x = (gx + 0.5) * CELL;
         const y = (gy + 0.5) * CELL;
-        if (shape.some((b) => x >= b.x0 && x < b.x1 && y >= b.y0 && y < b.y1)) this.free[gy * this.gw + gx] = 1;
+        if (inside(x, y)) this.free[gy * this.gw + gx] = 1;
       }
     }
     this.sat = new Int32Array((this.gw + 1) * (this.gh + 1));
@@ -226,13 +299,13 @@ function tryPlace(grid: ShapeGrid, name: string, size: number) {
 }
 
 /**
- * Lays the names out inside an invisible dumbbell. Each lift is placed once at
+ * Lays the names out inside an invisible shape. Each lift is placed once at
  * the biggest size that fits (sized by rank of work done); if any lift can't fit,
  * every target shrinks and the whole pass reruns, so no lift is ever dropped.
  * Then names repeat as small, faint filler until nothing more fits, which is what
  * makes the silhouette readable with only a handful of lifts.
  */
-function layoutDumbbell(exercises: SummaryExercise[]): { words: CloudWord[]; height: number } {
+function layoutShape(exercises: SummaryExercise[], def: ShapeDef): { words: CloudWord[]; height: number } {
   if (exercises.length === 0) return { words: [], height: 0 };
 
   const ranked = exercises
@@ -240,7 +313,9 @@ function layoutDumbbell(exercises: SummaryExercise[]): { words: CloudWord[]; hei
     .sort((a, b) => b.ex.setCount - a.ex.setCount || b.ex.volume - a.ex.volume || a.i - b.i)
     .map(({ ex }) => ex);
   const n = ranked.length;
-  const shape = dumbbellRects(CONTENT_WIDTH, DUMBBELL_HEIGHT);
+  const left = PAD + (CONTENT_WIDTH - def.w) / 2;
+  // WORD_MAX was tuned on the 470 px dumbbell; taller shapes get a proportionally bigger hero.
+  const wordMax = WORD_MAX * Math.sqrt(def.h / SHAPES.dumbbell.h);
   const boxOf = (p: { cx: number; cy: number; bw: number; bh: number }): Box => ({
     x0: p.cx - p.bw / 2,
     y0: p.cy - p.bh / 2,
@@ -249,7 +324,7 @@ function layoutDumbbell(exercises: SummaryExercise[]): { words: CloudWord[]; hei
   });
 
   for (let shrink = 1; shrink > 0.2; shrink *= 0.82) {
-    const grid = new ShapeGrid(CONTENT_WIDTH, DUMBBELL_HEIGHT, shape);
+    const grid = new ShapeGrid(def.w, def.h, def.inside);
     const words: CloudWord[] = [];
     let smallest = Infinity;
     let allPlaced = true;
@@ -257,7 +332,7 @@ function layoutDumbbell(exercises: SummaryExercise[]): { words: CloudWord[]; hei
     for (let rank = 0; rank < n && allPlaced; rank++) {
       const ex = ranked[rank];
       const t = n === 1 ? 0 : rank / (n - 1);
-      let size = (WORD_MAX - (WORD_MAX - WORD_MIN) * Math.pow(t, 0.75)) * shrink;
+      let size = (wordMax - (wordMax - WORD_MIN) * Math.pow(t, 0.75)) * shrink;
       let spot = null;
       for (; size >= HARD_MIN; size *= 0.92) {
         spot = tryPlace(grid, ex.name, size);
@@ -299,9 +374,9 @@ function layoutDumbbell(exercises: SummaryExercise[]): { words: CloudWord[]; hei
       }
     }
 
-    return { words: words.map((w) => ({ ...w, cx: w.cx + PAD })), height: DUMBBELL_HEIGHT };
+    return { words: words.map((w) => ({ ...w, cx: w.cx + left })), height: def.h };
   }
-  return { words: [], height: DUMBBELL_HEIGHT };
+  return { words: [], height: def.h };
 }
 
 /** A cloud word or lockup, stretched to its box and optionally rotated, with a drop shadow. */
@@ -388,20 +463,25 @@ interface Layout {
   stats: { value: string; label: string }[];
   dividerY: number;
   cloudY: number;
-  cloud: ReturnType<typeof layoutDumbbell>;
+  cloud: ReturnType<typeof layoutShape>;
   footerY: number;
   height: number;
 }
 
-const layoutCache = new WeakMap<SessionSummary, Layout>();
+const layoutCache = new WeakMap<SessionSummary, Map<CardShape, Layout>>();
 
 /**
  * Single source of truth for vertical positions, so cardHeight can never drift from
- * the render. Cached per summary: the dumbbell fill is a real search, and both
+ * the render. Cached per summary and shape: the fill is a real search, and both
  * cardHeight and every re-render (e.g. the PANEL/CLEAR toggle) ask for it.
  */
-function computeLayout(summary: SessionSummary): Layout {
-  const cached = layoutCache.get(summary);
+function computeLayout(summary: SessionSummary, shape: CardShape): Layout {
+  let perShape = layoutCache.get(summary);
+  if (!perShape) {
+    perShape = new Map();
+    layoutCache.set(summary, perShape);
+  }
+  const cached = perShape.get(shape);
   if (cached) return cached;
   const titleText = (summary.name || 'WORKOUT').toUpperCase();
   const titleSize = titleText.length > 26 ? 44 : titleText.length > 18 ? 56 : 72;
@@ -423,25 +503,30 @@ function computeLayout(summary: SessionSummary): Layout {
 
   const dividerY = y;
   const cloudY = y + 56;
-  const cloud = layoutDumbbell(summary.exercises);
+  const cloud = layoutShape(summary.exercises, SHAPES[shape]);
 
   // Keep the canvas an integer so the rasteriser is happy.
   const footerY = Math.round(cloudY + cloud.height + 76);
   const layout = { titleSize, titleText, pillsY, pills, statsY, stats, dividerY, cloudY, cloud, footerY, height: footerY + 56 };
-  layoutCache.set(summary, layout);
+  perShape.set(shape, layout);
   return layout;
 }
 
-export function cardHeight(summary: SessionSummary): number {
-  return computeLayout(summary).height;
+export function cardHeight(summary: SessionSummary, shape: CardShape): number {
+  return computeLayout(summary, shape).height;
+}
+
+/** Has this shape's layout already been built (so rendering it now won't stall)? */
+export function isCardPrepared(summary: SessionSummary, shape: CardShape): boolean {
+  return layoutCache.get(summary)?.has(shape) ?? false;
 }
 
 /**
- * Does the (cached) dumbbell layout. It's a real search, so the summary screen
+ * Does the (cached) word-art layout. It's a real search, so the summary screen
  * calls this after it has painted rather than during render.
  */
-export function prepareCard(summary: SessionSummary): void {
-  computeLayout(summary);
+export function prepareCard(summary: SessionSummary, shape: CardShape): void {
+  computeLayout(summary, shape);
 }
 
 /** White text is unreadable on a light photo, so every glyph gets a dark under-layer. */
@@ -494,6 +579,7 @@ function Barbell({ x, y, scale = 1 }: { x: number; y: number; scale?: number }) 
 
 interface ShareCardProps {
   summary: SessionSummary;
+  shape: CardShape;
   width: number;
   height: number;
   /** Translucent dark panel behind the text. Off = fully transparent, but white text dies on a light photo. */
@@ -501,10 +587,10 @@ interface ShareCardProps {
 }
 
 export const ShareCard = forwardRef<React.ElementRef<typeof Svg>, ShareCardProps>(function ShareCard(
-  { summary, width, height, scrim = true },
+  { summary, shape, width, height, scrim = true },
   ref
 ) {
-  const L = computeLayout(summary);
+  const L = computeLayout(summary, shape);
 
   const pillEls = L.pills.rows.flatMap((row, rowIndex) => {
     const rowY = L.pillsY + rowIndex * 66;

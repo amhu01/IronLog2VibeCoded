@@ -9,15 +9,18 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, Share, StyleSheet, Tex
 import type Svg from 'react-native-svg';
 import { Button } from '../components/Button';
 import { Card, CardTitle } from '../components/Card';
-import { CARD_WIDTH, ShareCard, cardHeight, prepareCard } from '../components/ShareCard';
+import { CARD_SHAPES, CARD_WIDTH, ShareCard, cardHeight, isCardPrepared, prepareCard, type CardShape } from '../components/ShareCard';
 import { getSessionSummary } from '../db/repository';
-import type { HistoryStackParamList } from '../navigation/types';
+import type { SessionStackParamList } from '../navigation/types';
 import { colors, fontSize, radius, spacing } from '../theme';
 import type { SessionSummary } from '../types';
 import { formatDateDisplay } from '../utils/date';
 import { formatVolume, formatWeight } from '../utils/format';
 
-type Props = NativeStackScreenProps<HistoryStackParamList, 'SessionSummary'>;
+type Props = NativeStackScreenProps<SessionStackParamList, 'SessionSummary'>;
+
+/** Remembered for the rest of the app session so the next card opens in the shape you last picked. */
+let lastShape: CardShape = 'dumbbell';
 
 function summaryToText(summary: SessionSummary): string {
   const lines: string[] = [];
@@ -43,7 +46,8 @@ export function SessionSummaryScreen({ route }: Props) {
   const [busy, setBusy] = useState<'share' | 'copy' | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [scrim, setScrim] = useState(true);
-  const [cardReadyFor, setCardReadyFor] = useState<SessionSummary | null>(null);
+  const [shape, setShapeState] = useState<CardShape>(lastShape);
+  const [cardReadyFor, setCardReadyFor] = useState<{ summary: SessionSummary; shape: CardShape } | null>(null);
   const svgRef = useRef<React.ElementRef<typeof Svg> | null>(null);
   const { width: screenWidth } = useWindowDimensions();
 
@@ -53,16 +57,25 @@ export function SessionSummaryScreen({ route }: Props) {
     }, [sessionId])
   );
 
-  // The dumbbell layout is a real search (~1 s on Hermes for a big session), so let
+  function setShape(next: CardShape) {
+    lastShape = next;
+    setShapeState(next);
+  }
+
+  // The word-art layout is a real search (~0.5–1 s on Hermes for a big session), so let
   // the screen paint first and build the card on the next tick instead of in render.
   useEffect(() => {
     if (!summary) return;
+    if (isCardPrepared(summary, shape)) {
+      setCardReadyFor({ summary, shape });
+      return;
+    }
     const id = setTimeout(() => {
-      prepareCard(summary);
-      setCardReadyFor(summary);
+      prepareCard(summary, shape);
+      setCardReadyFor({ summary, shape });
     }, 60);
     return () => clearTimeout(id);
-  }, [summary]);
+  }, [summary, shape]);
 
   useEffect(() => {
     if (!status) return;
@@ -74,7 +87,7 @@ export function SessionSummaryScreen({ route }: Props) {
   function captureBase64(): Promise<string> {
     const node = svgRef.current;
     if (!node || !summary) return Promise.reject(new Error('The card is not ready yet.'));
-    const height = cardHeight(summary);
+    const height = cardHeight(summary, shape);
     return new Promise<string>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('Rendering the image timed out.')), 10000);
       try {
@@ -155,8 +168,8 @@ export function SessionSummaryScreen({ route }: Props) {
 
   const previewWidth = screenWidth - spacing.md * 2 - spacing.md * 2;
   const scale = previewWidth / CARD_WIDTH;
-  const cardReady = cardReadyFor === summary;
-  const fullHeight = cardReady ? cardHeight(summary) : CARD_WIDTH * 1.12;
+  const cardReady = cardReadyFor?.summary === summary && cardReadyFor.shape === shape;
+  const fullHeight = cardReady ? cardHeight(summary, shape) : CARD_WIDTH * 1.12;
 
   return (
     <View style={styles.container}>
@@ -185,6 +198,18 @@ export function SessionSummaryScreen({ route }: Props) {
               ? 'PNG with a see-through dark panel — the photo shows through but the text stays readable.'
               : 'Fully transparent PNG. Best over a dark photo; white text can disappear on a light one.'}
           </Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.shapeScroll}
+            contentContainerStyle={styles.shapeChips}
+          >
+            {CARD_SHAPES.map((s) => (
+              <Pressable key={s.id} style={[styles.shapeChip, shape === s.id && styles.shapeChipActive]} onPress={() => setShape(s.id)}>
+                <Text style={[styles.shapeChipText, shape === s.id && styles.shapeChipTextActive]}>{s.label}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
           <View style={styles.previewFrame}>
             {cardReady ? (
               <>
@@ -199,7 +224,7 @@ export function SessionSummaryScreen({ route }: Props) {
                 </View>
                 <View style={[styles.previewClip, { width: previewWidth, height: fullHeight * scale }]}>
                   <View style={{ width: CARD_WIDTH, height: fullHeight, transform: [{ scale }], transformOrigin: 'top left' }}>
-                    <ShareCard ref={svgRef} summary={summary} width={CARD_WIDTH} height={fullHeight} scrim={scrim} />
+                    <ShareCard ref={svgRef} summary={summary} shape={shape} width={CARD_WIDTH} height={fullHeight} scrim={scrim} />
                   </View>
                 </View>
               </>
@@ -318,6 +343,37 @@ const styles = StyleSheet.create({
   },
   segmentTextActive: {
     color: colors.primaryText,
+  },
+  shapeScroll: {
+    flexGrow: 0,
+    flexShrink: 0,
+    marginBottom: spacing.sm + 4,
+  },
+  shapeChips: {
+    gap: spacing.xs,
+    alignItems: 'center',
+  },
+  shapeChip: {
+    height: 32,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm + 4,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  shapeChipActive: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primary,
+  },
+  shapeChipText: {
+    color: colors.textMuted,
+    fontSize: fontSize.tiny,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  shapeChipTextActive: {
+    color: colors.primary,
   },
   previewFrame: {
     borderRadius: radius.md,

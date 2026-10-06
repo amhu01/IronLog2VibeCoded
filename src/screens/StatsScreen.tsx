@@ -3,6 +3,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActivityHeatmap } from '../components/ActivityHeatmap';
 import { Card, CardTitle } from '../components/Card';
 import { EmptyState } from '../components/EmptyState';
 import { ScreenHeader } from '../components/ScreenHeader';
@@ -73,6 +74,11 @@ export function StatsScreen() {
             <StatTile label="Last 7 days" value={stats.sessionsLast7Days} icon="flame-outline" />
             <StatTile label="Weeks training" value={stats.weeksSinceFirstSession} icon="time-outline" />
           </View>
+
+          <Card>
+            <CardTitle title="Training calendar" />
+            <ActivityHeatmap activity={stats.activity} />
+          </Card>
 
           <Card>
             <CardTitle

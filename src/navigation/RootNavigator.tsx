@@ -11,26 +11,38 @@ import { SessionDetailScreen } from '../screens/SessionDetailScreen';
 import { SessionSummaryScreen } from '../screens/SessionSummaryScreen';
 import { StatsScreen } from '../screens/StatsScreen';
 import { colors } from '../theme';
-import type { HistoryStackParamList, RootTabParamList } from './types';
+import type { HistoryStackParamList, ProgressStackParamList, RootTabParamList } from './types';
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
 const HistoryStack = createNativeStackNavigator<HistoryStackParamList>();
+const ProgressStack = createNativeStackNavigator<ProgressStackParamList>();
+
+const stackScreenOptions = {
+  headerStyle: { backgroundColor: colors.background },
+  headerTintColor: colors.primary,
+  headerTitleStyle: { color: colors.text, fontWeight: '700' as const },
+  headerShadowVisible: false,
+  contentStyle: { backgroundColor: colors.background },
+};
 
 function HistoryStackNavigator() {
   return (
-    <HistoryStack.Navigator
-      screenOptions={{
-        headerStyle: { backgroundColor: colors.background },
-        headerTintColor: colors.primary,
-        headerTitleStyle: { color: colors.text, fontWeight: '700' },
-        headerShadowVisible: false,
-        contentStyle: { backgroundColor: colors.background },
-      }}
-    >
+    <HistoryStack.Navigator screenOptions={stackScreenOptions}>
       <HistoryStack.Screen name="HistoryList" component={HistoryScreen} options={{ headerShown: false }} />
       <HistoryStack.Screen name="SessionDetail" component={SessionDetailScreen} options={{ title: 'Session' }} />
       <HistoryStack.Screen name="SessionSummary" component={SessionSummaryScreen} options={{ title: 'Summary' }} />
     </HistoryStack.Navigator>
+  );
+}
+
+// Progress rows open the session they came from; a stack of its own means Back returns to the chart.
+function ProgressStackNavigator() {
+  return (
+    <ProgressStack.Navigator screenOptions={stackScreenOptions}>
+      <ProgressStack.Screen name="ProgressMain" component={ProgressScreen} options={{ headerShown: false }} />
+      <ProgressStack.Screen name="SessionDetail" component={SessionDetailScreen} options={{ title: 'Session' }} />
+      <ProgressStack.Screen name="SessionSummary" component={SessionSummaryScreen} options={{ title: 'Summary' }} />
+    </ProgressStack.Navigator>
   );
 }
 
@@ -77,7 +89,7 @@ export function RootNavigator() {
       >
         <Tab.Screen name="Log" component={LogScreen} />
         <Tab.Screen name="History" component={HistoryStackNavigator} />
-        <Tab.Screen name="Progress" component={ProgressScreen} />
+        <Tab.Screen name="Progress" component={ProgressStackNavigator} />
         <Tab.Screen name="Stats" component={StatsScreen} />
         <Tab.Screen name="Backup" component={BackupScreen} />
       </Tab.Navigator>

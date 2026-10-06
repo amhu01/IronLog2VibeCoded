@@ -32,7 +32,8 @@ async function openAndMigrate(): Promise<SQLite.SQLiteDatabase> {
     CREATE TABLE IF NOT EXISTS sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       date TEXT NOT NULL,
-      name TEXT NOT NULL DEFAULT ''
+      name TEXT NOT NULL DEFAULT '',
+      notes TEXT NOT NULL DEFAULT ''
     );
 
     CREATE TABLE IF NOT EXISTS session_exercises (
@@ -41,6 +42,7 @@ async function openAndMigrate(): Promise<SQLite.SQLiteDatabase> {
       name TEXT NOT NULL,
       muscle_group TEXT NOT NULL DEFAULT '',
       machine TEXT NOT NULL DEFAULT '',
+      notes TEXT NOT NULL DEFAULT '',
       has_base_resistance INTEGER NOT NULL DEFAULT 0,
       base_resistance REAL,
       position INTEGER NOT NULL DEFAULT 0
@@ -65,6 +67,8 @@ async function openAndMigrate(): Promise<SQLite.SQLiteDatabase> {
   await addColumnIfMissing(db, 'sessions', 'name', `TEXT NOT NULL DEFAULT ''`);
   await addColumnIfMissing(db, 'session_exercises', 'muscle_group', `TEXT NOT NULL DEFAULT ''`);
   await addColumnIfMissing(db, 'session_exercises', 'machine', `TEXT NOT NULL DEFAULT ''`);
+  await addColumnIfMissing(db, 'sessions', 'notes', `TEXT NOT NULL DEFAULT ''`);
+  await addColumnIfMissing(db, 'session_exercises', 'notes', `TEXT NOT NULL DEFAULT ''`);
   // v4 renamed the per-set flag from "reps in reserve" to "working set"; the flag
   // itself is unchanged, so rename in place rather than losing the marks.
   await renameColumnIfNeeded(db, 'sets', 'rir', 'ws');

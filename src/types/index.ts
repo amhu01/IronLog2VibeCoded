@@ -25,6 +25,7 @@ export interface Exercise {
   name: string;
   muscleGroup?: string;
   machine?: string;
+  notes?: string;
   hasBaseResistance?: boolean;
   baseResistance?: number;
   sets: SetEntry[];
@@ -34,6 +35,7 @@ export interface Session {
   id: number;
   date: string; // YYYY-MM-DD
   name?: string;
+  notes?: string;
   exercises: Exercise[];
 }
 
@@ -50,6 +52,8 @@ export interface ExerciseLastUse {
   baseResistance?: number;
   lastWeight: number | string;
   lastReps: number | string;
+  /** Most recent non-blank note for this exercise (on this machine, when one was asked for). */
+  lastNote: string;
 }
 
 export interface ExerciseCatalogEntry {
@@ -71,6 +75,12 @@ export interface MuscleGroupSets {
   sets: number;
 }
 
+export interface DayActivity {
+  date: string; // YYYY-MM-DD
+  sets: number;
+  sessions: number;
+}
+
 export interface StatsSummary {
   totalSessions: number;
   distinctExercises: number;
@@ -80,6 +90,7 @@ export interface StatsSummary {
   personalBests: PersonalBest[];
   setsByMuscleGroupLast7Days: MuscleGroupSets[];
   setsByMuscleGroupAllTime: MuscleGroupSets[];
+  activity: DayActivity[];
 }
 
 export interface SummaryExercise {

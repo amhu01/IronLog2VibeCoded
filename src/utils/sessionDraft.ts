@@ -11,6 +11,9 @@ export interface DraftExercise {
   name: string;
   muscleGroup: string;
   machine: string;
+  notes: string;
+  /** The last note logged for this lift, offered as a tap-to-reuse hint (never saved from here). */
+  lastNote: string;
   hasBaseResistance: boolean;
   baseResistance: string;
   sets: DraftSet[];
@@ -32,18 +35,26 @@ export function makeDraftExercise(name: string): DraftExercise {
     name,
     muscleGroup: '',
     machine: '',
+    notes: '',
+    lastNote: '',
     hasBaseResistance: false,
     baseResistance: '',
     sets: [makeDraftSet()],
   };
 }
 
-export function exerciseToDraft(ex: Exercise): DraftExercise {
+/**
+ * `notesAsHint` is for repeating a session: last time's note becomes the hint rather
+ * than being copied into the new session as if it had been written today.
+ */
+export function exerciseToDraft(ex: Exercise, notesAsHint = false): DraftExercise {
   return {
     key: nextKey(),
     name: ex.name,
     muscleGroup: ex.muscleGroup ?? '',
     machine: ex.machine ?? '',
+    notes: notesAsHint ? '' : ex.notes ?? '',
+    lastNote: notesAsHint ? ex.notes ?? '' : '',
     hasBaseResistance: !!ex.hasBaseResistance,
     baseResistance: ex.baseResistance !== undefined ? String(ex.baseResistance) : '',
     sets:
@@ -71,6 +82,8 @@ export function draftsToExercises(drafts: DraftExercise[]): Exercise[] {
       const machine = d.machine.trim().toUpperCase();
       if (muscleGroup) exercise.muscleGroup = muscleGroup;
       if (machine) exercise.machine = machine;
+      const notes = d.notes.trim();
+      if (notes) exercise.notes = notes;
       if (d.hasBaseResistance) {
         exercise.hasBaseResistance = true;
         const br = Number(d.baseResistance);

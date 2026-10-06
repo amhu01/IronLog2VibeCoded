@@ -57,7 +57,7 @@ export function LogScreen({ route, navigation }: Props) {
     return () => clearTimeout(id);
   }, [toast]);
 
-  async function handleSave(date: string, name: string, exercises: Exercise[]) {
+  async function handleSave(date: string, name: string, exercises: Exercise[], notes: string) {
     if (exercises.length === 0) {
       Alert.alert('Nothing to save', 'Add at least one exercise with a set.');
       return;
@@ -65,7 +65,7 @@ export function LogScreen({ route, navigation }: Props) {
     setSaving(true);
     try {
       const prs = await findNewPRs(exercises);
-      const sessionId = await createSession(date, exercises, name);
+      const sessionId = await createSession(date, exercises, name, notes);
       const label = name ? `“${name}”` : 'session';
       const prText = prs.length
         ? ` · NEW PR: ${prs.map((p) => `${p.name}${p.machine ? ` (${p.machine})` : ''} ${formatWeight(p.effectiveWeight)}`).join(', ')}`
@@ -104,13 +104,12 @@ export function LogScreen({ route, navigation }: Props) {
         key={formKey}
         initialDate={todayString()}
         initialName={template?.name ?? ''}
-        initialExercises={template ? template.exercises.map(exerciseToDraft) : []}
+        initialExercises={template ? template.exercises.map((ex) => exerciseToDraft(ex, true)) : []}
         catalog={catalog}
         allMachines={machines}
         recentNames={recentNames}
         saveLabel="Save session"
         saving={saving}
-        showRestTimer
         onSave={handleSave}
       />
     </SafeAreaView>

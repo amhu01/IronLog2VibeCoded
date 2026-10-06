@@ -1,5 +1,7 @@
+import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from '@react-navigation/native';
+import { useHeaderHeight } from '@react-navigation/elements';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -14,7 +16,7 @@ import {
   getSessionDetail,
   updateSession,
 } from '../db/repository';
-import type { HistoryStackParamList, RootTabParamList } from '../navigation/types';
+import type { RootTabParamList, SessionStackParamList } from '../navigation/types';
 import { colors, fontSize, radius, spacing } from '../theme';
 import type { Exercise, ExerciseCatalogEntry, Session } from '../types';
 import { formatDateDisplay } from '../utils/date';
@@ -22,7 +24,7 @@ import { formatVolume, formatWeight } from '../utils/format';
 import { exerciseToDraft } from '../utils/sessionDraft';
 import { countSets, sessionVolume, setEffectiveWeight } from '../utils/stats';
 
-type Props = NativeStackScreenProps<HistoryStackParamList, 'SessionDetail'>;
+type Props = NativeStackScreenProps<SessionStackParamList, 'SessionDetail'>;
 
 function Tag({ text, accent }: { text: string; accent?: boolean }) {
   return (
@@ -40,6 +42,7 @@ export function SessionDetailScreen({ route, navigation }: Props) {
   const [machines, setMachines] = useState<string[]>([]);
   const [recentNames, setRecentNames] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const headerHeight = useHeaderHeight();
 
   const load = useCallback(() => {
     getSessionDetail(sessionId).then(setSession);
@@ -75,10 +78,10 @@ export function SessionDetailScreen({ route, navigation }: Props) {
       ?.navigate('Log', { template: { name: session.name ?? '', exercises: session.exercises } });
   }
 
-  async function handleSave(date: string, name: string, exercises: Exercise[]) {
+  async function handleSave(date: string, name: string, exercises: Exercise[], notes: string) {
     setSaving(true);
     try {
-      await updateSession(sessionId, date, exercises, name);
+      await updateSession(sessionId, date, exercises, name, notes);
       setEditing(false);
       load();
     } catch (e) {
@@ -102,12 +105,14 @@ export function SessionDetailScreen({ route, navigation }: Props) {
         <SessionEditor
           initialDate={session.date}
           initialName={session.name ?? ''}
-          initialExercises={session.exercises.map(exerciseToDraft)}
+          initialNotes={session.notes ?? ''}
+          initialExercises={session.exercises.map((ex) => exerciseToDraft(ex))}
           catalog={catalog}
           allMachines={machines}
           recentNames={recentNames}
           saveLabel="Save changes"
           saving={saving}
+          keyboardOffset={headerHeight}
           onSave={handleSave}
           extraActions={
             <View style={styles.cancelWrap}>
@@ -139,6 +144,12 @@ export function SessionDetailScreen({ route, navigation }: Props) {
           <Text style={styles.title}>{formatDateDisplay(session.date)}</Text>
         )}
         <Text style={styles.meta}>{metaParts.join(' · ')}</Text>
+        {session.notes ? (
+          <View style={styles.sessionNotes}>
+            <Ionicons name="document-text-outline" size={16} color={colors.textMuted} />
+            <Text style={styles.sessionNotesText}>{session.notes}</Text>
+          </View>
+        ) : null}
 
         {session.exercises.map((ex, i) => (
           <Card key={i}>
@@ -157,6 +168,7 @@ export function SessionDetailScreen({ route, navigation }: Props) {
                 {ex.hasBaseResistance ? <Tag text={`base ${formatWeight(ex.baseResistance ?? 0)}`} /> : null}
               </View>
             )}
+            {ex.notes ? <Text style={styles.exNotes}>{ex.notes}</Text> : null}
             {ex.sets.map((s, j) => {
               const effective = ex.hasBaseResistance ? setEffectiveWeight(ex, s.weight) : null;
               return (
@@ -222,6 +234,29 @@ const styles = StyleSheet.create({
     fontSize: fontSize.small,
     marginTop: 2,
     marginBottom: spacing.md,
+  },
+  sessionNotes: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.sm + 4,
+    marginBottom: spacing.md,
+  },
+  sessionNotesText: {
+    flex: 1,
+    color: colors.text,
+    fontSize: fontSize.small,
+    lineHeight: 19,
+  },
+  exNotes: {
+    color: colors.textMuted,
+    fontSize: fontSize.small,
+    fontStyle: 'italic',
+    lineHeight: 18,
+    marginBottom: spacing.sm,
   },
   exHeader: {
     flexDirection: 'row',

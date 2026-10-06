@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { colors, fontSize, radius, spacing } from '../theme';
 import { MUSCLE_GROUPS } from '../types';
@@ -13,10 +13,14 @@ interface ExerciseCardProps {
   onChange: (exercise: DraftExercise) => void;
   onRemove: () => void;
   onMachineCommit: (machine: string) => void;
+  /** A field inside the card got focus; `offset` is its y within the card, so the editor can scroll it clear of the keyboard. */
+  onFieldFocus?: (offset: number) => void;
 }
 
-export function ExerciseCard({ index, exercise, machineSuggestions, onChange, onRemove, onMachineCommit }: ExerciseCardProps) {
+export function ExerciseCard({ index, exercise, machineSuggestions, onChange, onRemove, onMachineCommit, onFieldFocus }: ExerciseCardProps) {
   const [machineFocused, setMachineFocused] = useState(false);
+  const machineY = useRef(0);
+  const notesY = useRef(0);
 
   const filteredMachines = useMemo(() => {
     const q = exercise.machine.trim().toLowerCase();
@@ -81,44 +85,71 @@ export function ExerciseCard({ index, exercise, machineSuggestions, onChange, on
         })}
       </ScrollView>
 
-      <Text style={styles.fieldLabel}>MACHINE / BRAND (OPTIONAL)</Text>
-      <View style={[styles.machineWrap, machineFocused && styles.machineWrapFocused]}>
-        <Ionicons name="cog-outline" size={16} color={machineFocused ? colors.primary : colors.textFaint} />
+      <View onLayout={(e) => (machineY.current = e.nativeEvent.layout.y)}>
+        <Text style={styles.fieldLabel}>MACHINE / BRAND (OPTIONAL)</Text>
+        <View style={[styles.machineWrap, machineFocused && styles.machineWrapFocused]}>
+          <Ionicons name="cog-outline" size={16} color={machineFocused ? colors.primary : colors.textFaint} />
+          <TextInput
+            style={styles.machineInput}
+            placeholder="E.G. HAMMER STRENGTH"
+            placeholderTextColor={colors.textFaint}
+            value={exercise.machine}
+            onChangeText={(v) => onChange({ ...exercise, machine: v.toUpperCase() })}
+            onFocus={() => {
+              setMachineFocused(true);
+              onFieldFocus?.(machineY.current);
+            }}
+            onBlur={() => {
+              setTimeout(() => setMachineFocused(false), 150);
+              onMachineCommit(exercise.machine);
+            }}
+            onSubmitEditing={() => onMachineCommit(exercise.machine)}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            returnKeyType="done"
+          />
+          {exercise.machine !== '' && (
+            <Pressable onPress={() => pickMachine('')} hitSlop={8}>
+              <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+            </Pressable>
+          )}
+        </View>
+        {machineFocused && filteredMachines.length > 0 && (
+          <View style={styles.suggestions}>
+            {filteredMachines.map((m, i) => (
+              <Pressable
+                key={m}
+                style={[styles.suggestionRow, i === filteredMachines.length - 1 && styles.suggestionRowLast]}
+                onPress={() => pickMachine(m)}
+              >
+                <Text style={styles.suggestionText}>{m}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+      </View>
+
+      <View onLayout={(e) => (notesY.current = e.nativeEvent.layout.y)}>
+        <Text style={styles.fieldLabel}>NOTES</Text>
         <TextInput
-          style={styles.machineInput}
-          placeholder="E.G. HAMMER STRENGTH"
+          style={styles.notesInput}
+          placeholder="Seat 4, slow negatives, felt the left side more…"
           placeholderTextColor={colors.textFaint}
-          value={exercise.machine}
-          onChangeText={(v) => onChange({ ...exercise, machine: v.toUpperCase() })}
-          onFocus={() => setMachineFocused(true)}
-          onBlur={() => {
-            setTimeout(() => setMachineFocused(false), 150);
-            onMachineCommit(exercise.machine);
-          }}
-          onSubmitEditing={() => onMachineCommit(exercise.machine)}
-          autoCapitalize="characters"
-          autoCorrect={false}
-          returnKeyType="done"
+          value={exercise.notes}
+          onChangeText={(v) => onChange({ ...exercise, notes: v })}
+          onFocus={() => onFieldFocus?.(notesY.current)}
+          multiline
         />
-        {exercise.machine !== '' && (
-          <Pressable onPress={() => pickMachine('')} hitSlop={8}>
-            <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+        {exercise.lastNote !== '' && exercise.notes.trim() !== exercise.lastNote && (
+          <Pressable style={styles.lastNote} onPress={() => onChange({ ...exercise, notes: exercise.lastNote })} hitSlop={4}>
+            <Ionicons name="arrow-undo-outline" size={14} color={colors.primary} />
+            <Text style={styles.lastNoteText} numberOfLines={3}>
+              <Text style={styles.lastNoteLabel}>LAST TIME  </Text>
+              {exercise.lastNote}
+            </Text>
           </Pressable>
         )}
       </View>
-      {machineFocused && filteredMachines.length > 0 && (
-        <View style={styles.suggestions}>
-          {filteredMachines.map((m, i) => (
-            <Pressable
-              key={m}
-              style={[styles.suggestionRow, i === filteredMachines.length - 1 && styles.suggestionRowLast]}
-              onPress={() => pickMachine(m)}
-            >
-              <Text style={styles.suggestionText}>{m}</Text>
-            </Pressable>
-          ))}
-        </View>
-      )}
 
       <View style={styles.bandedRow}>
         <View style={styles.bandedText}>
@@ -288,10 +319,43 @@ const styles = StyleSheet.create({
     fontSize: fontSize.small,
     fontWeight: '600',
   },
+  notesInput: {
+    minHeight: 44,
+    color: colors.text,
+    fontSize: fontSize.small,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.sm + 4,
+    paddingVertical: 10,
+    marginBottom: spacing.xs + 2,
+    textAlignVertical: 'top',
+  },
+  lastNote: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.xs + 2,
+    paddingVertical: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  lastNoteText: {
+    flex: 1,
+    color: colors.textMuted,
+    fontSize: fontSize.small,
+    lineHeight: 18,
+  },
+  lastNoteLabel: {
+    color: colors.primary,
+    fontSize: fontSize.tiny,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
   bandedRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: spacing.sm,
     marginBottom: spacing.sm,
   },
   bandedText: {

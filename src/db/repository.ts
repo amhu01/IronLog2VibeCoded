@@ -1,5 +1,6 @@
 import { getDb } from './database';
 import type {
+  DayActivity,
   Exercise,
   ExerciseCatalogEntry,
   ExerciseLastUse,
@@ -35,6 +36,7 @@ interface SessionRow {
   id: number;
   date: string;
   name: string;
+  notes: string;
 }
 
 interface SessionExerciseRow {
@@ -43,6 +45,7 @@ interface SessionExerciseRow {
   name: string;
   muscle_group: string;
   machine: string;
+  notes: string;
   has_base_resistance: number;
   base_resistance: number | null;
   position: number;
@@ -57,7 +60,8 @@ interface SetRow {
   position: number;
 }
 
-const EXERCISE_COLS = `id, session_id, name, muscle_group, machine, has_base_resistance, base_resistance, position`;
+const SESSION_COLS = `id, date, name, notes`;
+const EXERCISE_COLS = `id, session_id, name, muscle_group, machine, notes, has_base_resistance, base_resistance, position`;
 const SET_COLS = `id, session_exercise_id, weight, reps, ws, position`;
 
 function rowsToSets(rows: SetRow[]): SetEntry[] {
@@ -69,6 +73,7 @@ function rowToExercise(row: SessionExerciseRow, sets: SetEntry[]): Exercise {
     name: row.name,
     muscleGroup: row.muscle_group,
     machine: row.machine,
+    notes: row.notes,
     hasBaseResistance: !!row.has_base_resistance,
     baseResistance: row.base_resistance ?? undefined,
     sets,
@@ -79,12 +84,13 @@ async function insertExercisesForSession(db: Db, sessionId: number, exercises: E
   for (let i = 0; i < exercises.length; i++) {
     const ex = exercises[i];
     const seResult = await db.runAsync(
-      `INSERT INTO session_exercises (session_id, name, muscle_group, machine, has_base_resistance, base_resistance, position)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO session_exercises (session_id, name, muscle_group, machine, notes, has_base_resistance, base_resistance, position)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       sessionId,
       normTag(ex.name),
       normTag(ex.muscleGroup),
       normTag(ex.machine),
+      (ex.notes ?? '').trim(),
       ex.hasBaseResistance ? 1 : 0,
       ex.hasBaseResistance && ex.baseResistance !== undefined ? ex.baseResistance : null,
       i
@@ -104,21 +110,27 @@ async function insertExercisesForSession(db: Db, sessionId: number, exercises: E
   }
 }
 
-export async function createSession(date: string, exercises: Exercise[], name: string = ''): Promise<number> {
+export async function createSession(date: string, exercises: Exercise[], name: string = '', notes: string = ''): Promise<number> {
   const db = await getDb();
   let newId = -1;
   await db.withTransactionAsync(async () => {
-    const result = await db.runAsync(`INSERT INTO sessions (date, name) VALUES (?, ?)`, date, name.trim());
+    const result = await db.runAsync(`INSERT INTO sessions (date, name, notes) VALUES (?, ?, ?)`, date, name.trim(), notes.trim());
     newId = result.lastInsertRowId;
     await insertExercisesForSession(db, newId, exercises);
   });
   return newId;
 }
 
-export async function updateSession(id: number, date: string, exercises: Exercise[], name: string = ''): Promise<void> {
+export async function updateSession(
+  id: number,
+  date: string,
+  exercises: Exercise[],
+  name: string = '',
+  notes: string = ''
+): Promise<void> {
   const db = await getDb();
   await db.withTransactionAsync(async () => {
-    await db.runAsync(`UPDATE sessions SET date = ?, name = ? WHERE id = ?`, date, name.trim(), id);
+    await db.runAsync(`UPDATE sessions SET date = ?, name = ?, notes = ? WHERE id = ?`, date, name.trim(), notes.trim(), id);
     await db.runAsync(`DELETE FROM session_exercises WHERE session_id = ?`, id);
     await insertExercisesForSession(db, id, exercises);
   });
@@ -141,7 +153,7 @@ export interface SessionListItem {
 
 export async function getSessionsList(): Promise<SessionListItem[]> {
   const db = await getDb();
-  const sessions = await db.getAllAsync<SessionRow>(`SELECT id, date, name FROM sessions ORDER BY date DESC, id DESC`);
+  const sessions = await db.getAllAsync<SessionRow>(`SELECT ${SESSION_COLS} FROM sessions ORDER BY date DESC, id DESC`);
   const exRows = await db.getAllAsync<{ session_id: number; name: string; muscle_group: string }>(
     `SELECT session_id, name, muscle_group FROM session_exercises ORDER BY session_id ASC, position ASC`
   );
@@ -173,7 +185,7 @@ export async function getSessionsList(): Promise<SessionListItem[]> {
 
 export async function getSessionDetail(id: number): Promise<Session | null> {
   const db = await getDb();
-  const sessionRow = await db.getFirstAsync<SessionRow>(`SELECT id, date, name FROM sessions WHERE id = ?`, id);
+  const sessionRow = await db.getFirstAsync<SessionRow>(`SELECT ${SESSION_COLS} FROM sessions WHERE id = ?`, id);
   if (!sessionRow) return null;
   const exerciseRows = await db.getAllAsync<SessionExerciseRow>(
     `SELECT ${EXERCISE_COLS} FROM session_exercises WHERE session_id = ? ORDER BY position ASC`,
@@ -187,7 +199,7 @@ export async function getSessionDetail(id: number): Promise<Session | null> {
     );
     exercises.push(rowToExercise(exRow, rowsToSets(setRows)));
   }
-  return { id: sessionRow.id, date: sessionRow.date, name: sessionRow.name, exercises };
+  return { id: sessionRow.id, date: sessionRow.date, name: sessionRow.name, notes: sessionRow.notes, exercises };
 }
 
 export async function getAllExerciseNames(): Promise<string[]> {
@@ -228,7 +240,7 @@ export async function getAllMachines(): Promise<string[]> {
   return rows.map((r) => r.machine);
 }
 
-export async function getRecentSessionNames(limit: number = 8): Promise<string[]> {
+export async function getRecentSessionNames(limit: number = 40): Promise<string[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<{ name: string }>(
     `SELECT name, MAX(date) as d FROM sessions WHERE name <> '' GROUP BY name COLLATE NOCASE ORDER BY d DESC, name ASC LIMIT ?`,
@@ -259,6 +271,13 @@ export async function getLastUseForExercise(name: string, machine?: string): Pro
     `SELECT ${SET_COLS} FROM sets WHERE session_exercise_id = ? ORDER BY position ASC LIMIT 1`,
     exRow.id
   );
+  // The newest use may have no note, so look back for the latest one that does.
+  const noteRow = await db.getFirstAsync<{ notes: string }>(
+    `SELECT se.notes FROM session_exercises se JOIN sessions s ON s.id = se.session_id
+     WHERE se.name = ? COLLATE NOCASE AND se.notes <> ''${machine === undefined ? '' : ' AND se.machine = ? COLLATE NOCASE'}
+     ORDER BY s.date DESC, se.id DESC LIMIT 1`,
+    ...(machine === undefined ? [name] : [name, normTag(machine)])
+  );
   return {
     name: exRow.name,
     muscleGroup: exRow.muscle_group,
@@ -267,6 +286,7 @@ export async function getLastUseForExercise(name: string, machine?: string): Pro
     baseResistance: exRow.base_resistance ?? undefined,
     lastWeight: setRow ? toNumOrStr(setRow.weight) : '',
     lastReps: setRow ? toNumOrStr(setRow.reps) : '',
+    lastNote: noteRow?.notes ?? '',
   };
 }
 
@@ -277,6 +297,8 @@ export interface ProgressPoint {
   machine: string;
   effectiveWeight: number;
   reps: number | string;
+  /** Every set that day in order, so a 100×8 top set can be read next to a 100×4 second set. */
+  sets: SetEntry[];
 }
 
 /** Best effective weight (kg) per session for an exercise, oldest first, across every machine. */
@@ -312,6 +334,7 @@ export async function getProgressForExercise(name: string): Promise<ProgressPoin
         sessionName: row.session_name,
         machine: row.machine,
         ...best,
+        sets: rowsToSets(setRows),
       });
     }
   }
@@ -416,6 +439,18 @@ export async function getSessionSummary(sessionId: number): Promise<SessionSumma
   };
 }
 
+/** Sets and sessions per training day, for the calendar heatmap. */
+async function dailyActivity(db: Db): Promise<DayActivity[]> {
+  return db.getAllAsync<DayActivity>(
+    `SELECT s.date AS date, COUNT(st.id) AS sets, COUNT(DISTINCT s.id) AS sessions
+     FROM sessions s
+     LEFT JOIN session_exercises se ON se.session_id = s.id
+     LEFT JOIN sets st ON st.session_exercise_id = se.id
+     GROUP BY s.date
+     ORDER BY s.date ASC`
+  );
+}
+
 async function setsByMuscleGroup(db: Db, sinceDate?: string): Promise<MuscleGroupSets[]> {
   const where = sinceDate ? `WHERE s.date >= ?` : ``;
   const rows = await db.getAllAsync<{ muscleGroup: string; sets: number }>(
@@ -487,12 +522,13 @@ export async function getStats(): Promise<StatsSummary> {
     personalBests,
     setsByMuscleGroupLast7Days: await setsByMuscleGroup(db, sevenDaysAgoStr),
     setsByMuscleGroupAllTime: await setsByMuscleGroup(db),
+    activity: await dailyActivity(db),
   };
 }
 
 export async function exportAllSessions(): Promise<Session[]> {
   const db = await getDb();
-  const sessions = await db.getAllAsync<SessionRow>(`SELECT id, date, name FROM sessions ORDER BY date ASC, id ASC`);
+  const sessions = await db.getAllAsync<SessionRow>(`SELECT ${SESSION_COLS} FROM sessions ORDER BY date ASC, id ASC`);
   const result: Session[] = [];
   for (const s of sessions) {
     const detail = await getSessionDetail(s.id);
@@ -503,7 +539,12 @@ export async function exportAllSessions(): Promise<Session[]> {
 
 async function insertSessions(db: Db, sessions: Omit<Session, 'id'>[]) {
   for (const s of sessions) {
-    const result = await db.runAsync(`INSERT INTO sessions (date, name) VALUES (?, ?)`, s.date, (s.name ?? '').trim());
+    const result = await db.runAsync(
+      `INSERT INTO sessions (date, name, notes) VALUES (?, ?, ?)`,
+      s.date,
+      (s.name ?? '').trim(),
+      (s.notes ?? '').trim()
+    );
     await insertExercisesForSession(db, result.lastInsertRowId, s.exercises);
   }
 }

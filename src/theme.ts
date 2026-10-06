@@ -16,6 +16,9 @@ export const colors = {
   successSoft: 'rgba(63, 211, 154, 0.14)',
 };
 
+/** Calendar heatmap intensity, from a rest day up to the busiest day in view. */
+export const heat = [colors.surfaceAlt, 'rgba(255, 138, 61, 0.28)', 'rgba(255, 138, 61, 0.5)', 'rgba(255, 138, 61, 0.75)', colors.primary];
+
 export const spacing = {
   xs: 4,
   sm: 8,

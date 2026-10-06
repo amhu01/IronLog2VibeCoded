@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { getLastUseForExercise } from '../db/repository';
 import { colors, fontSize, radius, spacing } from '../theme';
 import type { Exercise, ExerciseCatalogEntry } from '../types';
@@ -9,38 +9,53 @@ import { Button } from './Button';
 import { DateField } from './DateField';
 import { ExerciseCard } from './ExerciseCard';
 import { ExercisePicker } from './ExercisePicker';
-import { RestTimer } from './RestTimer';
+import { OptionSheet } from './OptionSheet';
 
 interface SessionEditorProps {
   initialDate: string;
   initialName: string;
+  initialNotes?: string;
   initialExercises: DraftExercise[];
   catalog: ExerciseCatalogEntry[];
   allMachines: string[];
   recentNames: string[];
   saveLabel: string;
   saving?: boolean;
-  showRestTimer?: boolean;
-  onSave: (date: string, name: string, exercises: Exercise[]) => void;
+  /** Height of anything above this editor that isn't part of its parent's frame, e.g. a stack header. */
+  keyboardOffset?: number;
+  onSave: (date: string, name: string, exercises: Exercise[], notes: string) => void;
   extraActions?: React.ReactNode;
 }
+
+/** Leaves a little of the previous card visible above whatever we scroll to. */
+const SCROLL_MARGIN = 12;
 
 export function SessionEditor({
   initialDate,
   initialName,
+  initialNotes = '',
   initialExercises,
   catalog,
   allMachines,
   recentNames,
   saveLabel,
   saving,
-  showRestTimer,
+  keyboardOffset = 0,
   onSave,
   extraActions,
 }: SessionEditorProps) {
   const [date, setDate] = useState(initialDate);
   const [name, setName] = useState(initialName);
+  const [notes, setNotes] = useState(initialNotes);
   const [exercises, setExercises] = useState<DraftExercise[]>(initialExercises);
+  const [pickingName, setPickingName] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+  const cardY = useRef(new Map<string, number>());
+  const scrollToNewKey = useRef<string | null>(null);
+
+  function scrollTo(y: number) {
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - SCROLL_MARGIN), animated: true });
+  }
 
   async function handleAddExercise(exerciseName: string) {
     const draft = makeDraftExercise(exerciseName);
@@ -51,8 +66,20 @@ export function SessionEditor({
       draft.hasBaseResistance = !!lastUse.hasBaseResistance;
       draft.baseResistance = lastUse.baseResistance !== undefined ? String(lastUse.baseResistance) : '';
       draft.sets = [{ weight: String(lastUse.lastWeight ?? ''), reps: String(lastUse.lastReps ?? ''), ws: false }];
+      // The hint follows the machine the draft starts on, same as the weights.
+      draft.lastNote = (await getLastUseForExercise(exerciseName, lastUse.machine))?.lastNote || lastUse.lastNote;
     }
+    // The picker sits above the list, so bring the new card into view once it has laid out.
+    scrollToNewKey.current = draft.key;
     setExercises((prev) => [...prev, draft]);
+  }
+
+  function handleCardLayout(key: string, y: number) {
+    cardY.current.set(key, y);
+    if (scrollToNewKey.current === key) {
+      scrollToNewKey.current = null;
+      scrollTo(y);
+    }
   }
 
   function updateExercise(key: string, updated: DraftExercise) {
@@ -60,27 +87,28 @@ export function SessionEditor({
   }
 
   function removeExercise(key: string) {
+    cardY.current.delete(key);
     setExercises((prev) => prev.filter((e) => e.key !== key));
   }
 
   // Switching machine re-fills the (still single) first set from the last session on that machine,
-  // since the same number means different things on different machines.
+  // since the same number means different things on different machines. The note hint always follows.
   async function handleMachineCommit(key: string, machine: string) {
     const target = exercises.find((e) => e.key === key);
-    if (!target || target.sets.length !== 1) return;
+    if (!target) return;
     const lastUse = await getLastUseForExercise(target.name, machine);
-    if (!lastUse) return;
     setExercises((prev) =>
-      prev.map((e) =>
-        e.key === key && e.sets.length === 1
-          ? {
-              ...e,
-              hasBaseResistance: !!lastUse.hasBaseResistance,
-              baseResistance: lastUse.baseResistance !== undefined ? String(lastUse.baseResistance) : '',
-              sets: [{ weight: String(lastUse.lastWeight ?? ''), reps: String(lastUse.lastReps ?? ''), ws: false }],
-            }
-          : e
-      )
+      prev.map((e) => {
+        if (e.key !== key) return e;
+        const withHint = { ...e, lastNote: lastUse?.lastNote ?? '' };
+        if (!lastUse || e.sets.length !== 1) return withHint;
+        return {
+          ...withHint,
+          hasBaseResistance: !!lastUse.hasBaseResistance,
+          baseResistance: lastUse.baseResistance !== undefined ? String(lastUse.baseResistance) : '',
+          sets: [{ weight: String(lastUse.lastWeight ?? ''), reps: String(lastUse.lastReps ?? ''), ws: false }],
+        };
+      })
     );
   }
 
@@ -91,76 +119,100 @@ export function SessionEditor({
   }
 
   function handleSave() {
-    onSave(date, name.trim(), draftsToExercises(exercises));
+    onSave(date, name.trim(), draftsToExercises(exercises), notes.trim());
   }
 
   const canSave = exercises.some((e) => e.name.trim() !== '');
-  const nameChips = recentNames.filter((n) => n.toLowerCase() !== name.trim().toLowerCase()).slice(0, 6);
 
   return (
-    <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <View style={styles.nameWrap}>
-        <Ionicons name="pricetag-outline" size={18} color={name ? colors.primary : colors.textMuted} />
-        <TextInput
-          style={styles.nameInput}
-          placeholder="Session name (optional) — e.g. PUSH DAY"
-          placeholderTextColor={colors.textFaint}
-          value={name}
-          onChangeText={setName}
-          autoCapitalize="characters"
-          autoCorrect={false}
-          returnKeyType="done"
-        />
-        {name !== '' && (
-          <Pressable onPress={() => setName('')} hitSlop={8}>
-            <Ionicons name="close-circle" size={18} color={colors.textMuted} />
-          </Pressable>
-        )}
-      </View>
-      {nameChips.length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.nameChips} keyboardShouldPersistTaps="handled">
-          {nameChips.map((n) => (
-            <Pressable key={n} style={styles.nameChip} onPress={() => setName(n)}>
-              <Text style={styles.nameChipText}>{n}</Text>
+    <KeyboardAvoidingView style={styles.flex} behavior="padding" keyboardVerticalOffset={keyboardOffset}>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <View style={styles.nameWrap}>
+          <Ionicons name="pricetag-outline" size={18} color={name ? colors.primary : colors.textMuted} />
+          <TextInput
+            style={styles.nameInput}
+            placeholder="Session name (optional) — e.g. PUSH DAY"
+            placeholderTextColor={colors.textFaint}
+            value={name}
+            onChangeText={setName}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            returnKeyType="done"
+          />
+          {name !== '' && (
+            <Pressable onPress={() => setName('')} hitSlop={8}>
+              <Ionicons name="close-circle" size={18} color={colors.textMuted} />
             </Pressable>
-          ))}
-        </ScrollView>
-      )}
-
-      <DateField date={date} onChange={setDate} />
-
-      {showRestTimer && <RestTimer />}
-
-      {exercises.length === 0 && (
-        <View style={styles.hint}>
-          <Ionicons name="arrow-down-circle-outline" size={20} color={colors.textFaint} />
-          <Text style={styles.hintText}>Add your first exercise below. Known exercises auto-fill your last weight, reps, muscle group and machine.</Text>
+          )}
+          {recentNames.length > 0 && (
+            <Pressable style={styles.nameDropBtn} onPress={() => setPickingName(true)} hitSlop={6}>
+              <Ionicons name="chevron-down" size={20} color={colors.text} />
+            </Pressable>
+          )}
         </View>
-      )}
 
-      {exercises.map((ex, i) => (
-        <ExerciseCard
-          key={ex.key}
-          index={i}
-          exercise={ex}
-          machineSuggestions={machineSuggestionsFor(ex.name)}
-          onChange={(updated) => updateExercise(ex.key, updated)}
-          onRemove={() => removeExercise(ex.key)}
-          onMachineCommit={(machine) => handleMachineCommit(ex.key, machine)}
-        />
-      ))}
+        <DateField date={date} onChange={setDate} />
 
-      <View style={styles.pickerWrap}>
-        <ExercisePicker catalog={catalog} onSubmit={handleAddExercise} />
-      </View>
+        <View style={styles.pickerWrap}>
+          <ExercisePicker catalog={catalog} onSubmit={handleAddExercise} />
+        </View>
 
-      <Button title={saveLabel} icon="checkmark" onPress={handleSave} disabled={!canSave} loading={saving} />
-      {extraActions}
-    </ScrollView>
+        {exercises.length === 0 && (
+          <View style={styles.hint}>
+            <Ionicons name="arrow-up-circle-outline" size={20} color={colors.textFaint} />
+            <Text style={styles.hintText}>Add your first exercise above. Known exercises auto-fill your last weight, reps, muscle group and machine.</Text>
+          </View>
+        )}
+
+        {exercises.map((ex, i) => (
+          <View key={ex.key} onLayout={(e) => handleCardLayout(ex.key, e.nativeEvent.layout.y)}>
+            <ExerciseCard
+              index={i}
+              exercise={ex}
+              machineSuggestions={machineSuggestionsFor(ex.name)}
+              onChange={(updated) => updateExercise(ex.key, updated)}
+              onRemove={() => removeExercise(ex.key)}
+              onMachineCommit={(machine) => handleMachineCommit(ex.key, machine)}
+              onFieldFocus={(offset) => scrollTo((cardY.current.get(ex.key) ?? 0) + offset)}
+            />
+          </View>
+        ))}
+
+        <View style={styles.notesWrap}>
+          <Text style={styles.notesLabel}>SESSION NOTES</Text>
+          <TextInput
+            style={styles.notesInput}
+            placeholder="How it went, how you slept, anything to remember…"
+            placeholderTextColor={colors.textFaint}
+            value={notes}
+            onChangeText={setNotes}
+            multiline
+          />
+        </View>
+
+        <Button title={saveLabel} icon="checkmark" onPress={handleSave} disabled={!canSave} loading={saving} />
+        {extraActions}
+      </ScrollView>
+
+      <OptionSheet
+        visible={pickingName}
+        title="Session name"
+        options={recentNames.map((n) => ({ value: n, label: n }))}
+        selected={name.trim() || null}
+        onClose={() => setPickingName(false)}
+        onSelect={(n) => {
+          setName(n);
+          setPickingName(false);
+        }}
+      />
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
   content: {
     padding: spacing.md,
     paddingBottom: spacing.xl * 2,
@@ -173,7 +225,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingHorizontal: spacing.md,
+    paddingLeft: spacing.md,
+    paddingRight: spacing.xs + 2,
     marginBottom: spacing.sm,
   },
   nameInput: {
@@ -183,23 +236,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     paddingVertical: 14,
   },
-  nameChips: {
-    gap: spacing.xs,
-    paddingBottom: spacing.md,
-  },
-  nameChip: {
-    paddingHorizontal: spacing.sm + 4,
-    paddingVertical: spacing.xs + 2,
-    borderRadius: radius.pill,
+  nameDropBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
     backgroundColor: colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  nameChipText: {
-    color: colors.textMuted,
-    fontSize: fontSize.tiny,
-    fontWeight: '800',
-    letterSpacing: 0.5,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   hint: {
     flexDirection: 'row',
@@ -220,6 +263,28 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   pickerWrap: {
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  notesWrap: {
+    marginBottom: spacing.md,
+  },
+  notesLabel: {
+    color: colors.textMuted,
+    fontSize: fontSize.tiny,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    marginBottom: spacing.sm,
+  },
+  notesInput: {
+    minHeight: 72,
+    color: colors.text,
+    fontSize: fontSize.body,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 4,
+    textAlignVertical: 'top',
   },
 });

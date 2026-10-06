@@ -30,6 +30,7 @@ export function parseBackup(raw: unknown): ImportedSession[] {
       const ex: Exercise = { name: e.name.trim().toUpperCase(), sets };
       if (typeof e.muscleGroup === 'string' && e.muscleGroup.trim()) ex.muscleGroup = e.muscleGroup.trim().toUpperCase();
       if (typeof e.machine === 'string' && e.machine.trim()) ex.machine = e.machine.trim().toUpperCase();
+      if (typeof e.notes === 'string' && e.notes.trim()) ex.notes = e.notes.trim();
       if (e.hasBaseResistance) {
         ex.hasBaseResistance = true;
         ex.baseResistance = typeof e.baseResistance === 'number' ? e.baseResistance : Number(e.baseResistance) || 0;
@@ -37,6 +38,7 @@ export function parseBackup(raw: unknown): ImportedSession[] {
       return ex;
     });
     const name = typeof s.name === 'string' ? s.name.trim() : '';
-    return { date: s.date, name, exercises };
+    const notes = typeof s.notes === 'string' ? s.notes.trim() : '';
+    return { date: s.date, name, notes, exercises };
   });
 }

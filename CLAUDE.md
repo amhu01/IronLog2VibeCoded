@@ -24,6 +24,12 @@ range is 4-8 reps and hitting 8 means add weight, so "reps in reserve" was the
 wrong label; a **session summary + shareable card**; unit-aware weight parsing
 (typing "60KG" used to chart as 0); a fix for stretched muscle-group pills in
 the exercise search; and backup import that still accepts pre-v4 `rir` files.
+v9 (2026-10-06): notes (per session and per exercise, with a "LAST TIME" hint),
+rest timer **removed** (Amir goes when ready, so it was clutter), "Add exercise"
+moved to the top of the Log form, dropdowns instead of chip rows for session
+names and the Progress machine filter, Progress session rows that show every
+set and open the session, a training-calendar heatmap on Stats, and a choice
+of five share-card shapes.
 This file is the source of truth
 for plan, progress, decisions, and blockers — update it continuously as work
 happens. If a session ends (out of context/tokens) or a different model picks
@@ -105,6 +111,25 @@ Run: `npx expo start` then open in Expo Go. Typecheck: `npx tsc --noEmit`.
      pre-fills name + exercises and is cleared with `setParams` once consumed.
      v4: the per-set flag button reads **WS**, and the save toast carries a
      SUMMARY link that deep-links into the History stack's SessionSummary.
+     v9: the RestTimer component is gone. The ExercisePicker sits at the **top**
+     (under name + date) because with 8 exercises the bottom was a long scroll
+     and the keyboard covered its suggestions; a new card is scrolled into view
+     once it lays out (`scrollToNewKey` + per-card `onLayout` y). Recent
+     session names open in an [OptionSheet](src/components/OptionSheet.tsx)
+     (bottom-sheet dropdown with search once ≥7 options) from a chevron in the
+     name field. **Notes**: a NOTES field per exercise plus SESSION NOTES above
+     Save. Last time's note for that lift (machine-specific, newest non-blank)
+     shows as a tap-to-reuse "LAST TIME" hint rather than being copied in, since
+     notes can be setup ("seat 4") or one-off ("felt weak"); "Repeat this
+     session" uses the same hint path (`exerciseToDraft(ex, true)`).
+     Keyboard: the editor is wrapped in `KeyboardAvoidingView behavior="padding"`.
+     With `edgeToEdgeEnabled` the window may not resize for the IME; KAV's
+     padding is `frameBottom - keyboardTop`, so it's 0 if the window did resize
+     and the real overlap if not — self-correcting either way. Inside the
+     History/Progress stacks pass `keyboardOffset={useHeaderHeight()}` because
+     KAV's frame is relative to the screen, which starts below the header.
+     Focusing the machine or notes field scrolls it near the top so its
+     dropdown isn't under the keyboard. Not verifiable without a phone.
 
 2. **History**: list of past sessions (most recent first), tap to see full detail
    (exercises + sets for that day), with edit and delete.
@@ -117,7 +142,8 @@ Run: `npx expo start` then open in Expo Go. Typecheck: `npx tsc --noEmit`.
      (`getSessionsList` aggregates in three queries, not N+1); detail shows
      name/date, "N exercises · N sets · Nk volume", muscle-group/machine/base
      tags per exercise, and a "Repeat this session" button that navigates to
-     the Log tab with the session as a template.
+     the Log tab with the session as a template. v9: detail shows session notes
+     in a panel and exercise notes in italics under the tags.
 
 2b. **Session summary / share card** (v4, added on request — "like Strava where
    you can copy your stats with a transparent background").
@@ -205,6 +231,18 @@ Run: `npx expo start` then open in Expo Go. Typecheck: `npx tsc --noEmit`.
        after first paint, showing "Building your card…" and disabling the
        image buttons until ready. Never call `cardHeight()` during render
        before the card is prepared.
+   - v9 (2026-10-06): **five shapes** — DUMBBELL, KETTLEBELL, PLATE, TROPHY,
+     HEART — picked by a chip row above the preview (fixed list, so chips are
+     fine there; remembered for the app session). `layoutDumbbell` became
+     `layoutShape(exercises, ShapeDef)`; a `ShapeDef` is `{ w, h, inside(x, y) }`
+     in shape-local px, rasterised by ShapeGrid as before, centred in the card,
+     so the card height now depends on the shape (`cardHeight(summary, shape)`,
+     cache is per summary **and** shape, `isCardPrepared` skips the spinner when
+     returning to a built shape). The hero cap scales with
+     `sqrt(shape.h / 470)` so a single lift still dominates taller shapes.
+     Two tuning lessons from the renders: the kettlebell handle's window must
+     sit clearly above the body or it reads as a blob, and the plate's hole
+     needs r ≥ 0.25 or big centre words swallow it.
    - v5 (2026-09-23): four actions — **Copy image** (`expo-clipboard`
      `setImageAsync(base64)`, the Strava-style "copy" ask), Share image, Copy
      text, Share text — with an inline confirmation pill. `captureBase64()` is
@@ -229,7 +267,13 @@ Run: `npx expo start` then open in Expo Go. Typecheck: `npx tsc --noEmit`.
      done on more than one machine, a MACHINE chip row (ALL / each machine /
      NO MACHINE) filters everything below it — the filter is client-side over
      `getProgressForExercise`, which now returns `machine` and `sessionName`
-     per point. The search modal shows each exercise's muscle group and has
+     per point. v9: the machine filter is a SelectField + OptionSheet (with a
+     session count per machine) instead of chips; each session row lists
+     **every** set ("100×8 · 100×4") because Amir only adds weight when both
+     working sets hit 8, and the top set alone hid that; tapping a row opens
+     the session. Progress is now its own native stack (`ProgressMain` →
+     SessionDetail → SessionSummary, sharing `SessionStackParamList` with
+     History) so Back returns to the chart rather than to History. The search modal shows each exercise's muscle group and has
      group filter chips. v4: chart values are kg (title says so) and
      unit-suffixed entries like "60KG" now plot correctly instead of 0.
 
@@ -242,7 +286,13 @@ Run: `npx expo start` then open in Expo Go. Typecheck: `npx tsc --noEmit`.
      v3: PBs are per (exercise, machine) — the same lift on two machines is two
      rows, the machine shown under the name — and a "Sets by muscle group" card
      with a 7 DAYS / ALL toggle draws bars from `setsByMuscleGroup*` (untagged
-     sets counted separately).
+     sets counted separately). v9: a "Training calendar" card
+     ([ActivityHeatmap](src/components/ActivityHeatmap.tsx)) — GitHub-style,
+     Monday-first week columns sized to the card width, 5 intensity levels
+     (`heat` in theme) relative to the busiest day in view by set count, month
+     labels, tap a day for "date — N sets". Data from `getStats().activity`
+     (`dailyActivity`: sets + sessions per date). `buildHeatmap` is pure and
+     builds every date from y/m/d (not +24 h) so DST can't skip a day.
 
 5. **Backup**: export all data to a JSON file using the device's real share/save
    sheet (expo-file-system + expo-sharing — NOT a browser-style forced download,
@@ -283,7 +333,9 @@ verify thoroughly before building screens on top of it.
   `addColumnIfMissing` (checks `PRAGMA table_info` then `ALTER TABLE ADD
   COLUMN`) so databases from earlier builds upgrade in place — keep every
   future schema change additive like this; never drop/recreate tables. Blank
-  string means "not set". In v4 `sets.rir` became `sets.ws` via
+  string means "not set". v9 added `sessions.notes` and
+  `session_exercises.notes` the same way (free text, trimmed, **not**
+  uppercased). In v4 `sets.rir` became `sets.ws` via
   `renameColumnIfNeeded` (`ALTER TABLE ... RENAME COLUMN`, guarded on the old
   column existing and the new one not) — a rename keeps every existing flag,
   unlike add-new-column-and-copy, and is still non-destructive. weight/reps
@@ -302,7 +354,8 @@ verify thoroughly before building screens on top of it.
 
 ## Possible additions (nice to have, don't block core functionality)
 
-- ~~Rest timer between sets (60/90/120s presets)~~ done in v3
+- ~~Rest timer between sets (60/90/120s presets)~~ done in v3, removed in v9
+  on request — don't bring it back unprompted
 - Bodyweight tracking with its own trend chart
 - Workout templates (save an exercise list as a reusable routine) — partly
   covered by "Repeat this session" from History (v3); a named, editable
@@ -579,6 +632,28 @@ confirmed all 3 persisted correctly with exact same values.")
   4 → 6 px, making SAT rebuilds start at the first changed row, and pruning
   failed box sizes; plus the deferred build so the screen never blocks.
 
+- v9 verified (2026-10-06): `npx tsc --noEmit` clean; `npx expo export
+  --platform android` bundled 1132 modules, no errors. 23 checks against
+  better-sqlite3 seeded with the **v4 schema on the phone** (no notes
+  columns): upgrade added both columns with old rows blank and sets
+  untouched (100×8, 100×4 WS); notes trimmed on write, blank ones omitted;
+  session + exercise notes round-trip through create/update; `lastNote` skips
+  a newer blank-note use and is machine-specific when a machine is given;
+  repeat turns notes into the hint; progress points carry every set; daily
+  activity counts (incl. a set-less session on a busy day); heatmap = Monday
+  columns, today in the last one, future days flagged, levels relative to the
+  busiest day, labels AUG/SEP/OCT; a DST week under TZ=America/New_York gave
+  21 unique dates; backups carry notes, pre-notes backups still import, and
+  export → replace → export is identical. Share card: every shape rendered for
+  5 / 14 / 1 lifts through the SVG-shim + faithful `textLength` harness (both
+  rebuilt — scratchpad had been wiped) and looked at; first pass had a
+  blob-like kettlebell and an invisible plate hole, fixed and re-rendered.
+  Layout under `node --jitless`: 0.3–0.7 s typical, worst 1.05 s (PLATE,
+  14 lifts) — deferred behind the spinner and cached per shape.
+  `@react-navigation/elements` added as a direct dep for `useHeaderHeight`
+  (was transitive; `npm ls` confirms one deduped copy, which matters because
+  a second copy would have its own header context and the hook would throw).
+
 ## Blockers / known issues
 
 (Document anything infeasible, any fallback taken instead of the original
@@ -680,7 +755,8 @@ plan, or anything left unfinished, with reasoning.)
 
 ## Final build
 
-- Local APK: **v3 built 2026-09-17** (previous builds 2026-09-11) —
+- Local APK: latest build is whatever `scripts/build-apk.sh` last produced
+  (v9 on 2026-10-06; the cold v3 build of 2026-09-17 is described here) —
   `iron-log.apk` at the project root (gitignored via `*.apk`), 34 MiB,
   arm64-v8a, signed with the debug keystore (fine for sideloading; generate a
   real keystore only if you ever publish to the Play Store). Built with

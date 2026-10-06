@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,14 +8,29 @@ import { Card, CardTitle } from '../components/Card';
 import { EmptyState } from '../components/EmptyState';
 import { ExerciseSearchModal } from '../components/ExerciseSearchModal';
 import { LineChart } from '../components/LineChart';
+import { OptionSheet, SelectField } from '../components/OptionSheet';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { getExerciseCatalog, getProgressForExercise, type ProgressPoint } from '../db/repository';
+import type { ProgressStackParamList } from '../navigation/types';
 import { colors, fontSize, radius, spacing } from '../theme';
-import type { ExerciseCatalogEntry } from '../types';
+import type { ExerciseCatalogEntry, SetEntry } from '../types';
 import { formatDateDisplay } from '../utils/date';
 import { formatDateShort, formatDelta, formatWeight } from '../utils/format';
 
+type Props = NativeStackScreenProps<ProgressStackParamList, 'ProgressMain'>;
+
 const NO_MACHINE = '';
+/** OptionSheet values are strings, so "all machines" needs a value no machine name can take. */
+const ALL_MACHINES = '\u0000all';
+
+function machineLabel(m: string): string {
+  return m === NO_MACHINE ? 'NO MACHINE' : m;
+}
+
+/** Every set that day, so a 100 × 8 top set reads next to the 100 × 4 that followed it. */
+function formatSets(sets: SetEntry[]): string {
+  return sets.map((s) => `${s.weight}×${s.reps}`).join('  ·  ');
+}
 
 function MiniStat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
@@ -38,12 +54,13 @@ function DeltaPill({ delta }: { delta: number }) {
   );
 }
 
-export function ProgressScreen() {
+export function ProgressScreen({ navigation }: Props) {
   const [catalog, setCatalog] = useState<ExerciseCatalogEntry[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [allPoints, setAllPoints] = useState<ProgressPoint[]>([]);
   const [machineFilter, setMachineFilter] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
+  const [pickingMachine, setPickingMachine] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -126,20 +143,12 @@ export function ProgressScreen() {
 
           {machines.length > 1 && (
             <View style={styles.machineBlock}>
-              <Text style={styles.machineLabel}>MACHINE — numbers only compare on the same one</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll} contentContainerStyle={styles.chips}>
-                <Pressable style={[styles.chip, activeFilter === null && styles.chipActive]} onPress={() => setMachineFilter(null)}>
-                  <Text style={[styles.chipText, activeFilter === null && styles.chipTextActive]}>ALL</Text>
-                </Pressable>
-                {machines.map((m) => {
-                  const active = activeFilter === m;
-                  return (
-                    <Pressable key={m || '__none'} style={[styles.chip, active && styles.chipActive]} onPress={() => setMachineFilter(m)}>
-                      <Text style={[styles.chipText, active && styles.chipTextActive]}>{m === NO_MACHINE ? 'NO MACHINE' : m}</Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
+              <SelectField
+                label="MACHINE — NUMBERS ONLY COMPARE ON THE SAME ONE"
+                value={activeFilter === null ? `ALL MACHINES (${machines.length})` : machineLabel(activeFilter)}
+                icon="cog-outline"
+                onPress={() => setPickingMachine(true)}
+              />
             </View>
           )}
 
@@ -160,29 +169,55 @@ export function ProgressScreen() {
               const older = newestFirst[i + 1];
               const d = older ? p.effectiveWeight - older.effectiveWeight : null;
               return (
-                <View key={`${p.date}-${i}`} style={[styles.pointRow, i === newestFirst.length - 1 && styles.pointRowLast]}>
-                  <View style={styles.pointLeft}>
-                    <Text style={styles.pointDate}>{formatDateDisplay(p.date)}</Text>
-                    {(p.sessionName || (showMachineTags && p.machine)) && (
-                      <Text style={styles.pointSub} numberOfLines={1}>
-                        {[p.sessionName, showMachineTags ? p.machine : ''].filter(Boolean).join(' · ')}
+                <Pressable
+                  key={`${p.sessionId}-${i}`}
+                  style={({ pressed }) => [styles.pointRow, i === newestFirst.length - 1 && styles.pointRowLast, pressed && styles.pointRowPressed]}
+                  onPress={() => navigation.navigate('SessionDetail', { sessionId: p.sessionId })}
+                >
+                  <View style={styles.pointTop}>
+                    <View style={styles.pointLeft}>
+                      <Text style={styles.pointDate}>{formatDateDisplay(p.date)}</Text>
+                      {(p.sessionName || (showMachineTags && p.machine)) && (
+                        <Text style={styles.pointSub} numberOfLines={1}>
+                          {[p.sessionName, showMachineTags ? p.machine : ''].filter(Boolean).join(' · ')}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={styles.pointRight}>
+                      {d !== null && d !== 0 && (
+                        <Text style={[styles.pointDelta, { color: d > 0 ? colors.success : colors.danger }]}>{formatDelta(d)}</Text>
+                      )}
+                      <Text style={styles.pointValue}>
+                        {formatWeight(p.effectiveWeight)} × {p.reps}
                       </Text>
-                    )}
+                      <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+                    </View>
                   </View>
-                  <View style={styles.pointRight}>
-                    {d !== null && d !== 0 && (
-                      <Text style={[styles.pointDelta, { color: d > 0 ? colors.success : colors.danger }]}>{formatDelta(d)}</Text>
-                    )}
-                    <Text style={styles.pointValue}>
-                      {formatWeight(p.effectiveWeight)} × {p.reps}
-                    </Text>
-                  </View>
-                </View>
+                  {p.sets.length > 1 && <Text style={styles.pointSets}>{formatSets(p.sets)}</Text>}
+                </Pressable>
               );
             })}
           </Card>
         </ScrollView>
       )}
+
+      <OptionSheet
+        visible={pickingMachine}
+        title="Machine"
+        options={[
+          { value: ALL_MACHINES, label: 'ALL MACHINES', sub: `${allPoints.length} sessions` },
+          ...machines.map((m) => {
+            const n = allPoints.filter((p) => p.machine === m).length;
+            return { value: m, label: machineLabel(m), sub: `${n} session${n === 1 ? '' : 's'}` };
+          }),
+        ]}
+        selected={activeFilter ?? ALL_MACHINES}
+        onClose={() => setPickingMachine(false)}
+        onSelect={(v) => {
+          setMachineFilter(v === ALL_MACHINES ? null : v);
+          setPickingMachine(false);
+        }}
+      />
 
       <ExerciseSearchModal visible={picking} entries={catalog} selected={selected} onClose={() => setPicking(false)} onSelect={selectExercise} />
     </SafeAreaView>
@@ -238,43 +273,6 @@ const styles = StyleSheet.create({
   machineBlock: {
     marginBottom: spacing.md,
   },
-  machineLabel: {
-    color: colors.textFaint,
-    fontSize: fontSize.tiny,
-    fontWeight: '800',
-    letterSpacing: 1,
-    marginBottom: spacing.xs + 2,
-  },
-  chipsScroll: {
-    flexGrow: 0,
-    flexShrink: 0,
-  },
-  chips: {
-    gap: spacing.xs,
-    alignItems: 'center',
-  },
-  chip: {
-    height: 32,
-    justifyContent: 'center',
-    paddingHorizontal: spacing.sm + 4,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  chipActive: {
-    backgroundColor: colors.primarySoft,
-    borderColor: colors.primary,
-  },
-  chipText: {
-    color: colors.textMuted,
-    fontSize: fontSize.tiny,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  chipTextActive: {
-    color: colors.primary,
-  },
   statRow: {
     flexDirection: 'row',
     gap: spacing.sm,
@@ -318,16 +316,27 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   pointRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: spacing.sm,
     paddingVertical: spacing.sm + 2,
     borderBottomColor: colors.border,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   pointRowLast: {
     borderBottomWidth: 0,
+  },
+  pointRowPressed: {
+    opacity: 0.6,
+  },
+  pointTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  pointSets: {
+    color: colors.textMuted,
+    fontSize: fontSize.small,
+    fontWeight: '600',
+    marginTop: spacing.xs,
   },
   pointLeft: {
     flex: 1,
