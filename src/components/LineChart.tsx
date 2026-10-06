@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import Svg, { Circle, Defs, Line, LinearGradient, Polygon, Polyline, Stop, Text as SvgText } from 'react-native-svg';
-import { colors, fontSize, spacing } from '../theme';
+import { colors, fontSize, spacing, themed } from '../theme';
 import { formatWeight } from '../utils/format';
+import { t } from '../i18n';
 
 export interface ChartPoint {
   label: string;
@@ -25,7 +26,7 @@ export function LineChart({ points, height = 220 }: LineChartProps) {
   if (points.length === 0) {
     return (
       <View style={[styles.empty, { height }]}>
-        <Text style={styles.emptyText}>No data yet</Text>
+        <Text style={styles.emptyText}>{t('No data yet')}</Text>
       </View>
     );
   }
@@ -128,7 +129,7 @@ export function LineChart({ points, height = 220 }: LineChartProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   wrap: {
     width: '100%',
   },
@@ -140,4 +141,4 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     padding: spacing.md,
   },
-});
+}));

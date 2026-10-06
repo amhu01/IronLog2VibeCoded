@@ -2,19 +2,26 @@ import { Ionicons } from '@expo/vector-icons';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '../components/ScreenHeader';
-import { SessionEditor } from '../components/SessionEditor';
+import { SessionEditor, type EditorDraft } from '../components/SessionEditor';
 import { createSession, findNewPRs, getAllMachines, getExerciseCatalog, getRecentSessionNames } from '../db/repository';
 import type { RootTabParamList } from '../navigation/types';
-import { colors, fontSize, radius, spacing } from '../theme';
+import { colors, fontSize, radius, spacing, themed } from '../theme';
 import type { Exercise, ExerciseCatalogEntry, SessionTemplate } from '../types';
+import { t } from '../i18n';
 import { formatDateDisplay, todayString } from '../utils/date';
 import { formatWeight } from '../utils/format';
 import { exerciseToDraft } from '../utils/sessionDraft';
 
 type Props = BottomTabScreenProps<RootTabParamList, 'Log'>;
+
+/**
+ * The unsaved session, kept outside the component: changing language or colours
+ * redraws the whole app, and a half-logged workout must survive that.
+ */
+let unsavedDraft: EditorDraft | null = null;
 
 interface Toast {
   text: string;
@@ -47,6 +54,7 @@ export function LogScreen({ route, navigation }: Props) {
   useEffect(() => {
     if (!incoming) return;
     setTemplate(incoming);
+    unsavedDraft = null;
     setFormKey((k) => k + 1);
     navigation.setParams({ template: undefined });
   }, [incoming, navigation]);
@@ -59,23 +67,26 @@ export function LogScreen({ route, navigation }: Props) {
 
   async function handleSave(date: string, name: string, exercises: Exercise[], notes: string) {
     if (exercises.length === 0) {
-      Alert.alert('Nothing to save', 'Add at least one exercise with a set.');
+      Alert.alert(t('Nothing to save'), t('Add at least one exercise with a set.'));
       return;
     }
     setSaving(true);
     try {
       const prs = await findNewPRs(exercises);
       const sessionId = await createSession(date, exercises, name, notes);
-      const label = name ? `“${name}”` : 'session';
+      const saved = name
+        ? t('Saved “{name}” for {date}', { name, date: formatDateDisplay(date) })
+        : t('Saved session for {date}', { date: formatDateDisplay(date) });
       const prText = prs.length
-        ? ` · NEW PR: ${prs.map((p) => `${p.name}${p.machine ? ` (${p.machine})` : ''} ${formatWeight(p.effectiveWeight)}`).join(', ')}`
+        ? ` · ${t('NEW PR')}: ${prs.map((p) => `${p.name}${p.machine ? ` (${p.machine})` : ''} ${formatWeight(p.effectiveWeight)}`).join(', ')}`
         : '';
-      setToast({ text: `Saved ${label} for ${formatDateDisplay(date)}${prText}`, pr: prs.length > 0, sessionId });
+      setToast({ text: saved + prText, pr: prs.length > 0, sessionId });
       setTemplate(null);
+      unsavedDraft = null;
       setFormKey((k) => k + 1);
       refresh();
     } catch (e) {
-      Alert.alert('Failed to save', String(e));
+      Alert.alert(t('Failed to save'), String(e));
     } finally {
       setSaving(false);
     }
@@ -84,8 +95,14 @@ export function LogScreen({ route, navigation }: Props) {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScreenHeader
-        title="Log"
-        subtitle={template ? `Repeating ${template.name ? `“${template.name}”` : 'a previous session'} — adjust and save` : formatDateDisplay(todayString())}
+        title={t('Log')}
+        subtitle={
+          template
+            ? template.name
+              ? t('Repeating “{name}” — adjust and save', { name: template.name })
+              : t('Repeating a previous session — adjust and save')
+            : formatDateDisplay(todayString())
+        }
       />
       {toast && (
         <View style={[styles.toast, toast.pr && styles.toastPr]}>
@@ -96,19 +113,21 @@ export function LogScreen({ route, navigation }: Props) {
             onPress={() => navigation.navigate('History', { screen: 'SessionSummary', params: { sessionId: toast.sessionId } })}
             hitSlop={6}
           >
-            <Text style={[styles.toastActionText, toast.pr && styles.toastTextPr]}>SUMMARY</Text>
+            <Text style={[styles.toastActionText, toast.pr && styles.toastTextPr]}>{t('SUMMARY')}</Text>
           </Pressable>
         </View>
       )}
       <SessionEditor
         key={formKey}
-        initialDate={todayString()}
-        initialName={template?.name ?? ''}
-        initialExercises={template ? template.exercises.map((ex) => exerciseToDraft(ex, true)) : []}
+        initialDate={unsavedDraft?.date ?? todayString()}
+        initialName={unsavedDraft?.name ?? template?.name ?? ''}
+        initialNotes={unsavedDraft?.notes ?? ''}
+        initialExercises={unsavedDraft?.exercises ?? (template ? template.exercises.map((ex) => exerciseToDraft(ex, true)) : [])}
+        onDraftChange={(d) => (unsavedDraft = d)}
         catalog={catalog}
         allMachines={machines}
         recentNames={recentNames}
-        saveLabel="Save session"
+        saveLabel={t('Save session')}
         saving={saving}
         onSave={handleSave}
       />
@@ -116,7 +135,7 @@ export function LogScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -155,4 +174,4 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textDecorationLine: 'underline',
   },
-});
+}));

@@ -1,14 +1,13 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, fontSize, heat, spacing } from '../theme';
+import { Pressable, Text, View } from 'react-native';
+import { colors, fontSize, heat, spacing, themed } from '../theme';
 import type { DayActivity } from '../types';
 import { dateToString, formatDateDisplay, parseDateString, todayString } from '../utils/date';
+import { monthShort, t, tn, weekdayInitials } from '../i18n';
 
 const CELL = 15;
 const GAP = 3;
 const DAY_LABEL_WIDTH = 16;
-const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-const DAY_LABELS = ['M', '', 'W', '', 'F', '', 'S'];
 
 export interface HeatCell {
   date: string;
@@ -22,7 +21,8 @@ export interface HeatCell {
 export interface HeatmapGrid {
   /** Columns are Monday-first weeks, oldest on the left; the last column holds today. */
   weeks: HeatCell[][];
-  monthLabels: { col: number; text: string }[];
+  /** Month index 0–11; the label text is chosen at render so it follows the app language. */
+  monthLabels: { col: number; month: number }[];
   trainingDays: number;
 }
 
@@ -61,22 +61,22 @@ export function buildHeatmap(activity: DayActivity[], today: string, weekCount: 
 
   // A month is labelled over the week holding its 1st; the leftmost column gets its own
   // month too unless that label would crowd the next one.
-  const monthName = (date: string) => MONTHS[Number(date.slice(5, 7)) - 1];
-  const monthLabels: { col: number; text: string }[] = [];
+  const monthOf = (date: string) => Number(date.slice(5, 7)) - 1;
+  const monthLabels: { col: number; month: number }[] = [];
   weeks.forEach((col, i) => {
     const first = col.find((c) => c.date.endsWith('-01'));
-    if (first) monthLabels.push({ col: i, text: monthName(first.date) });
+    if (first) monthLabels.push({ col: i, month: monthOf(first.date) });
   });
-  if (monthLabels.length === 0 || monthLabels[0].col >= 3) monthLabels.unshift({ col: 0, text: monthName(weeks[0][0].date) });
+  if (monthLabels.length === 0 || monthLabels[0].col >= 3) monthLabels.unshift({ col: 0, month: monthOf(weeks[0][0].date) });
 
   return { weeks, monthLabels, trainingDays };
 }
 
 function describe(cell: HeatCell): string {
   const when = formatDateDisplay(cell.date);
-  if (cell.sessions === 0) return `${when} — rest day`;
-  const sessions = cell.sessions > 1 ? `${cell.sessions} sessions · ` : '';
-  return `${when} — ${sessions}${cell.sets} set${cell.sets === 1 ? '' : 's'}`;
+  if (cell.sessions === 0) return t('{date} — rest day', { date: when });
+  const sessions = cell.sessions > 1 ? `${t('{n} sessions', { n: cell.sessions })} · ` : '';
+  return `${when} — ${sessions}${tn(cell.sets, '{n} set', '{n} sets')}`;
 }
 
 export function ActivityHeatmap({ activity }: { activity: DayActivity[] }) {
@@ -91,18 +91,20 @@ export function ActivityHeatmap({ activity }: { activity: DayActivity[] }) {
       {grid && (
         <>
           <Text style={styles.summary}>
-            {grid.trainingDays} training day{grid.trainingDays === 1 ? '' : 's'} in the last {weekCount} weeks
+            {tn(grid.trainingDays, '{n} training day in the last {weeks} weeks', '{n} training days in the last {weeks} weeks', {
+              weeks: weekCount,
+            })}
           </Text>
           <View style={styles.monthRow}>
             {grid.monthLabels.map((m) => (
-              <Text key={`${m.col}-${m.text}`} style={[styles.monthLabel, { left: DAY_LABEL_WIDTH + m.col * (CELL + GAP) }]}>
-                {m.text}
+              <Text key={`${m.col}-${m.month}`} style={[styles.monthLabel, { left: DAY_LABEL_WIDTH + m.col * (CELL + GAP) }]}>
+                {monthShort(m.month)}
               </Text>
             ))}
           </View>
           <View style={styles.gridRow}>
             <View style={styles.dayLabels}>
-              {DAY_LABELS.map((d, i) => (
+              {weekdayInitials().map((d, i) => (
                 <Text key={i} style={styles.dayLabel}>
                   {d}
                 </Text>
@@ -128,14 +130,14 @@ export function ActivityHeatmap({ activity }: { activity: DayActivity[] }) {
           </View>
           <View style={styles.footer}>
             <Text style={styles.detail} numberOfLines={1}>
-              {selected ? describe(selected) : 'Tap a day for details'}
+              {selected ? describe(selected) : t('Tap a day for details')}
             </Text>
             <View style={styles.legend}>
-              <Text style={styles.legendText}>LESS</Text>
+              <Text style={styles.legendText}>{t('LESS')}</Text>
               {heat.map((c) => (
                 <View key={c} style={[styles.legendCell, { backgroundColor: c }]} />
               ))}
-              <Text style={styles.legendText}>MORE</Text>
+              <Text style={styles.legendText}>{t('MORE')}</Text>
             </View>
           </View>
         </>
@@ -144,7 +146,7 @@ export function ActivityHeatmap({ activity }: { activity: DayActivity[] }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   summary: {
     color: colors.textMuted,
     fontSize: fontSize.small,
@@ -216,4 +218,4 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 3,
   },
-});
+}));

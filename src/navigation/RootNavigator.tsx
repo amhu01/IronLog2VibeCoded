@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { DarkTheme, NavigationContainer } from '@react-navigation/native';
+import { DarkTheme, NavigationContainer, type NavigationState } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
+import { t } from '../i18n';
 import { BackupScreen } from '../screens/BackupScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
 import { LogScreen } from '../screens/LogScreen';
@@ -17,20 +18,21 @@ const Tab = createBottomTabNavigator<RootTabParamList>();
 const HistoryStack = createNativeStackNavigator<HistoryStackParamList>();
 const ProgressStack = createNativeStackNavigator<ProgressStackParamList>();
 
-const stackScreenOptions = {
+// Built per render (not module constants) so a theme change picks up the new colours.
+const stackScreenOptions = () => ({
   headerStyle: { backgroundColor: colors.background },
   headerTintColor: colors.primary,
   headerTitleStyle: { color: colors.text, fontWeight: '700' as const },
   headerShadowVisible: false,
   contentStyle: { backgroundColor: colors.background },
-};
+});
 
 function HistoryStackNavigator() {
   return (
-    <HistoryStack.Navigator screenOptions={stackScreenOptions}>
+    <HistoryStack.Navigator screenOptions={stackScreenOptions()}>
       <HistoryStack.Screen name="HistoryList" component={HistoryScreen} options={{ headerShown: false }} />
-      <HistoryStack.Screen name="SessionDetail" component={SessionDetailScreen} options={{ title: 'Session' }} />
-      <HistoryStack.Screen name="SessionSummary" component={SessionSummaryScreen} options={{ title: 'Summary' }} />
+      <HistoryStack.Screen name="SessionDetail" component={SessionDetailScreen} options={{ title: t('Session') }} />
+      <HistoryStack.Screen name="SessionSummary" component={SessionSummaryScreen} options={{ title: t('Summary') }} />
     </HistoryStack.Navigator>
   );
 }
@@ -38,25 +40,13 @@ function HistoryStackNavigator() {
 // Progress rows open the session they came from; a stack of its own means Back returns to the chart.
 function ProgressStackNavigator() {
   return (
-    <ProgressStack.Navigator screenOptions={stackScreenOptions}>
+    <ProgressStack.Navigator screenOptions={stackScreenOptions()}>
       <ProgressStack.Screen name="ProgressMain" component={ProgressScreen} options={{ headerShown: false }} />
-      <ProgressStack.Screen name="SessionDetail" component={SessionDetailScreen} options={{ title: 'Session' }} />
-      <ProgressStack.Screen name="SessionSummary" component={SessionSummaryScreen} options={{ title: 'Summary' }} />
+      <ProgressStack.Screen name="SessionDetail" component={SessionDetailScreen} options={{ title: t('Session') }} />
+      <ProgressStack.Screen name="SessionSummary" component={SessionSummaryScreen} options={{ title: t('Summary') }} />
     </ProgressStack.Navigator>
   );
 }
-
-const theme = {
-  ...DarkTheme,
-  colors: {
-    ...DarkTheme.colors,
-    background: colors.background,
-    card: colors.surface,
-    text: colors.text,
-    border: colors.border,
-    primary: colors.primary,
-  },
-};
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -65,12 +55,38 @@ const TAB_ICONS: Record<keyof RootTabParamList, { active: IconName; inactive: Ic
   History: { active: 'time', inactive: 'time-outline' },
   Progress: { active: 'trending-up', inactive: 'trending-up-outline' },
   Stats: { active: 'stats-chart', inactive: 'stats-chart-outline' },
-  Backup: { active: 'cloud-upload', inactive: 'cloud-upload-outline' },
+  Backup: { active: 'settings', inactive: 'settings-outline' },
 };
 
-export function RootNavigator() {
+// The Backup route also hosts settings now; its name stays for navigation, only the label changed.
+const TAB_LABELS: Record<keyof RootTabParamList, string> = {
+  Log: 'Log',
+  History: 'History',
+  Progress: 'Progress',
+  Stats: 'Stats',
+  Backup: 'Settings',
+};
+
+interface RootNavigatorProps {
+  /** Restores the screen you were on when the app redraws after a settings change. */
+  initialState?: NavigationState;
+  onStateChange?: (state: NavigationState | undefined) => void;
+}
+
+export function RootNavigator({ initialState, onStateChange }: RootNavigatorProps) {
+  const theme = {
+    ...DarkTheme,
+    colors: {
+      ...DarkTheme.colors,
+      background: colors.background,
+      card: colors.surface,
+      text: colors.text,
+      border: colors.border,
+      primary: colors.primary,
+    },
+  };
   return (
-    <NavigationContainer theme={theme}>
+    <NavigationContainer theme={theme} initialState={initialState} onStateChange={onStateChange}>
       <Tab.Navigator
         screenOptions={({ route }) => ({
           headerShown: false,
@@ -81,6 +97,7 @@ export function RootNavigator() {
             borderTopColor: colors.border,
             borderTopWidth: 1,
           },
+          tabBarLabel: t(TAB_LABELS[route.name]),
           tabBarLabelStyle: { fontSize: 11, fontWeight: '700' },
           tabBarIcon: ({ color, focused, size }) => (
             <Ionicons name={focused ? TAB_ICONS[route.name].active : TAB_ICONS[route.name].inactive} size={size} color={color} />

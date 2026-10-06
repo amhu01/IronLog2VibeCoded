@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, fontSize, radius, spacing } from '../theme';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { colors, fontSize, radius, spacing, themed } from '../theme';
 
 type Variant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'ghostDanger';
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -15,16 +15,18 @@ interface ButtonProps {
   icon?: IconName;
 }
 
-const textColor: Record<Variant, string> = {
-  primary: colors.primaryText,
-  secondary: colors.text,
-  danger: '#ffffff',
-  ghost: colors.primary,
-  ghostDanger: colors.danger,
-};
+// A function, not a constant: the accent colour can change at runtime.
+const textColor = (variant: Variant): string =>
+  ({
+    primary: colors.primaryText,
+    secondary: colors.text,
+    danger: '#ffffff',
+    ghost: colors.primary,
+    ghostDanger: colors.danger,
+  })[variant];
 
 export function Button({ title, onPress, variant = 'primary', disabled, loading, icon }: ButtonProps) {
-  const color = textColor[variant];
+  const color = textColor(variant);
   return (
     <Pressable
       onPress={onPress}
@@ -48,7 +50,7 @@ export function Button({ title, onPress, variant = 'primary', disabled, loading,
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   base: {
     paddingVertical: 14,
     paddingHorizontal: spacing.lg,
@@ -73,12 +75,12 @@ const styles = StyleSheet.create({
     fontSize: fontSize.h3,
     fontWeight: '700',
   },
-});
+}));
 
-const variantStyles = StyleSheet.create({
+const variantStyles = themed(() => ({
   primary: { backgroundColor: colors.primary },
   secondary: { backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border },
   danger: { backgroundColor: colors.danger },
   ghost: { backgroundColor: 'transparent' },
   ghostDanger: { backgroundColor: 'transparent' },
-});
+}));

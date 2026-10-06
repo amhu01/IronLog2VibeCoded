@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { colors, fontSize, radius, spacing } from '../theme';
+import { Pressable, Text, TextInput, View } from 'react-native';
+import { colors, fontSize, radius, spacing, themed } from '../theme';
 import type { DraftSet } from '../utils/sessionDraft';
 
 interface SetRowProps {
@@ -49,7 +49,7 @@ export function SetRow({ index, set, onChange, onRemove }: SetRowProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -109,4 +109,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+}));

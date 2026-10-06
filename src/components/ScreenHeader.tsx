@@ -1,6 +1,6 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { colors, fontSize, spacing } from '../theme';
+import { Text, View } from 'react-native';
+import { colors, fontSize, spacing, themed } from '../theme';
 
 interface ScreenHeaderProps {
   title: string;
@@ -21,7 +21,7 @@ export function ScreenHeader({ title, subtitle, right }: ScreenHeaderProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   wrap: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -49,4 +49,4 @@ const styles = StyleSheet.create({
     fontSize: fontSize.small,
     marginTop: 2,
   },
-});
+}));

@@ -569,3 +569,14 @@ export async function mergeData(sessions: Omit<Session, 'id'>[]): Promise<void> 
     await insertSessions(db, sessions);
   });
 }
+
+export async function getSettings(): Promise<Record<string, string>> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ key: string; value: string }>(`SELECT key, value FROM settings`);
+  return Object.fromEntries(rows.map((r) => [r.key, r.value]));
+}
+
+export async function setSetting(key: string, value: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value);
+}

@@ -14,10 +14,11 @@ import { OptionSheet, SelectField } from '../components/OptionSheet';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { getExerciseCatalog, getProgressForExercise, type ProgressPoint } from '../db/repository';
 import type { ProgressStackParamList } from '../navigation/types';
-import { colors, fontSize, radius, spacing } from '../theme';
+import { colors, fontSize, radius, spacing, themed } from '../theme';
 import type { ExerciseCatalogEntry, SetEntry } from '../types';
 import { formatDateDisplay } from '../utils/date';
 import { formatDateShort, formatDelta, formatWeight } from '../utils/format';
+import { muscleLabel, t, tn } from '../i18n';
 
 type Props = NativeStackScreenProps<ProgressStackParamList, 'ProgressMain'>;
 
@@ -26,7 +27,7 @@ const NO_MACHINE = '';
 const ALL_MACHINES = '\u0000all';
 
 function machineLabel(m: string): string {
-  return m === NO_MACHINE ? 'NO MACHINE' : m;
+  return m === NO_MACHINE ? t('NO MACHINE') : m;
 }
 
 /** Every set that day, so a 100 × 8 top set reads next to the 100 × 4 that followed it. */
@@ -125,11 +126,15 @@ export function ProgressScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScreenHeader
-        title="Progress"
-        subtitle={catalog.length > 0 ? `${catalog.length} exercise${catalog.length === 1 ? '' : 's'} tracked` : undefined}
+        title={t('Progress')}
+        subtitle={catalog.length > 0 ? tn(catalog.length, '{n} exercise tracked', '{n} exercises tracked') : undefined}
       />
       {catalog.length === 0 ? (
-        <EmptyState icon="trending-up-outline" title="Nothing to chart yet" body="Log a session and your exercises will show up here." />
+        <EmptyState
+          icon="trending-up-outline"
+          title={t('Nothing to chart yet')}
+          body={t('Log a session and your exercises will show up here.')}
+        />
       ) : (
         <ScrollView contentContainerStyle={styles.content}>
           <Pressable style={({ pressed }) => [styles.selector, pressed && styles.selectorPressed]} onPress={() => setPicking(true)}>
@@ -137,9 +142,9 @@ export function ProgressScreen({ navigation }: Props) {
               <Ionicons name="barbell" size={20} color={colors.primary} />
             </View>
             <View style={styles.selectorText}>
-              <Text style={styles.selectorLabel}>EXERCISE</Text>
+              <Text style={styles.selectorLabel}>{t('EXERCISE')}</Text>
               <Text style={styles.selectorValue} numberOfLines={1}>
-                {selected ?? 'Choose an exercise'}
+                {selected ?? t('Choose an exercise')}
               </Text>
             </View>
             <Ionicons name="search" size={20} color={colors.textMuted} />
@@ -148,8 +153,8 @@ export function ProgressScreen({ navigation }: Props) {
           {machines.length > 1 && (
             <View style={styles.machineBlock}>
               <SelectField
-                label="MACHINE — NUMBERS ONLY COMPARE ON THE SAME ONE"
-                value={activeFilter === null ? `ALL MACHINES (${machines.length})` : machineLabel(activeFilter)}
+                label={t('MACHINE — NUMBERS ONLY COMPARE ON THE SAME ONE')}
+                value={activeFilter === null ? t('ALL MACHINES ({n})', { n: machines.length }) : machineLabel(activeFilter)}
                 icon="cog-outline"
                 onPress={() => setPickingMachine(true)}
               />
@@ -157,18 +162,18 @@ export function ProgressScreen({ navigation }: Props) {
           )}
 
           <View style={styles.statRow}>
-            <MiniStat label="Best" value={best ? formatWeight(best.effectiveWeight) : '–'} accent />
-            <MiniStat label="Latest" value={latest ? formatWeight(latest.effectiveWeight) : '–'} />
-            <MiniStat label="Sessions" value={String(points.length)} />
+            <MiniStat label={t('Best')} value={best ? formatWeight(best.effectiveWeight) : '–'} accent />
+            <MiniStat label={t('Latest')} value={latest ? formatWeight(latest.effectiveWeight) : '–'} />
+            <MiniStat label={t('Sessions')} value={String(points.length)} />
           </View>
 
           <Card>
-            <CardTitle title="Best effective weight (kg)" right={delta !== null ? <DeltaPill delta={delta} /> : undefined} />
+            <CardTitle title={t('Best effective weight (kg)')} right={delta !== null ? <DeltaPill delta={delta} /> : undefined} />
             <LineChart points={chartPoints} />
           </Card>
 
           <Card>
-            <CardTitle title="Sessions" />
+            <CardTitle title={t('Sessions')} />
             {newestFirst.map((p, i) => {
               const older = newestFirst[i + 1];
               const d = older ? p.effectiveWeight - older.effectiveWeight : null;
@@ -205,16 +210,16 @@ export function ProgressScreen({ navigation }: Props) {
 
           <Card>
             <CardTitle
-              title="Targets"
-              right={muscleGroup ? <Text style={styles.targetTag}>{muscleGroup}</Text> : undefined}
+              title={t('Targets')}
+              right={muscleGroup ? <Text style={styles.targetTag}>{muscleLabel(muscleGroup)}</Text> : undefined}
             />
             {mapped ? (
               <MuscleMap levels={regionLevels({ [muscleGroup]: 1 })} maxWidth={240} />
             ) : (
               <Text style={styles.targetHint}>
                 {muscleGroup
-                  ? `${muscleGroup} isn't on the body map.`
-                  : 'No muscle group tagged yet — pick one on this exercise next time you log it and it lights up here.'}
+                  ? t("{group} isn't on the body map.", { group: muscleLabel(muscleGroup) })
+                  : t('No muscle group tagged yet — pick one on this exercise next time you log it and it lights up here.')}
               </Text>
             )}
           </Card>
@@ -223,12 +228,12 @@ export function ProgressScreen({ navigation }: Props) {
 
       <OptionSheet
         visible={pickingMachine}
-        title="Machine"
+        title={t('Machine')}
         options={[
-          { value: ALL_MACHINES, label: 'ALL MACHINES', sub: `${allPoints.length} sessions` },
+          { value: ALL_MACHINES, label: t('ALL MACHINES'), sub: tn(allPoints.length, '{n} session', '{n} sessions') },
           ...machines.map((m) => {
             const n = allPoints.filter((p) => p.machine === m).length;
-            return { value: m, label: machineLabel(m), sub: `${n} session${n === 1 ? '' : 's'}` };
+            return { value: m, label: machineLabel(m), sub: tn(n, '{n} session', '{n} sessions') };
           }),
         ]}
         selected={activeFilter ?? ALL_MACHINES}
@@ -244,7 +249,7 @@ export function ProgressScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -397,4 +402,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: fontSize.body,
   },
-});
+}));

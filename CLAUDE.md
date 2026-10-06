@@ -36,6 +36,9 @@ top-right of the share card (what that session hit). Primary muscle only, by
 Amir's choice: it should push him to tag exercises accurately. The tag list
 got finer for it (TRAPS, LATS, LOWER BACK, FOREARMS, ABS, OBLIQUES, ADDUCTORS;
 ABS replaces CORE).
+v11 (2026-10-06): **Bahasa Melayu** UI and **colour customisation** (8 accent
+colours × 4 dark backgrounds), both under the Backup tab, now labelled
+Settings; changes apply instantly without a restart.
 This file is the source of truth
 for plan, progress, decisions, and blockers — update it continuously as work
 happens. If a session ends (out of context/tokens) or a different model picks
@@ -53,7 +56,12 @@ then mounts `src/navigation/RootNavigator.tsx`). Code lives under `src/`
 
 UI conventions (added 2026-09-11): dark theme with an orange accent, defined
 entirely in [src/theme.ts](src/theme.ts) (`colors`/`spacing`/`radius`/`fontSize`)
-— don't hardcode colours or font sizes in screens. Shared building blocks:
+— don't hardcode colours or font sizes in screens. **Since v11 the theme is
+user-switchable**, so two rules: (1) every stylesheet is `themed(() => ({…}))`,
+never `StyleSheet.create`, and (2) never copy a colour into a module-level
+constant — read `colors.x` at render time. Likewise **every user-visible
+string goes through `t()` / `tn()`** from [src/i18n](src/i18n/index.ts), with
+a matching entry in [ms.ts](src/i18n/ms.ts) (see Settings below). Shared building blocks:
 [ScreenHeader](src/components/ScreenHeader.tsx) (eyebrow + big title + subtitle,
 used by every tab), [Card](src/components/Card.tsx) + `CardTitle` (bordered
 surface panel with an uppercase micro-label), [EmptyState](src/components/EmptyState.tsx),
@@ -347,6 +355,34 @@ Run: `npx expo start` then open in Expo Go. Typecheck: `npx tsc --noEmit`.
    - Tags: `MUSCLE_GROUPS` is ordered top to bottom of the body. CORE → ABS via
      an idempotent `UPDATE` on open, plus `MUSCLE_GROUP_ALIASES` applied on
      every write (`normGroup`) so CORE in an imported backup also lands as ABS.
+
+7. **Settings: language + colours** (v11). The Backup tab (route name still
+   `Backup`, label "Settings", gear icon) gains Language and Accent colour /
+   Background cards above Export/Import.
+   - Storage: `settings(key TEXT PRIMARY KEY, value TEXT)` via `CREATE TABLE
+     IF NOT EXISTS` (additive); upserts, 3 rows. [prefs.tsx](src/prefs.tsx)
+     `loadPrefs()` sanitises (unknown values → defaults) and applies before the
+     first screen renders (App.tsx awaits DB → prefs).
+   - Theme: `colors`, `heat` and `muscle` are mutated in place by
+     `applyTheme(accent, background)`; `themed()` returns a Proxy that rebuilds
+     its stylesheet when the theme version changes. Backgrounds are all dark on
+     purpose (share-card white text and scrims assume it). The share card reads
+     `colors.primary` too (brand, PR words, pills, map, barbell).
+   - Language: English text is its own key; `t()` falls back to English for
+     anything missing. `tn(n, one, many)` handles English plurals (Malay has
+     none). Muscle tags stay stored in English and are only *displayed* via
+     `muscleLabel()`; dates use `toLocaleDateString('ms-MY')`; heatmap months
+     and weekday initials come from i18n (`buildHeatmap` returns month
+     indexes, named at render).
+   - Applying a change: App bumps a `version` that keys `RootNavigator`, so
+     every screen redraws with new colours/text; `NavigationContainer` gets the
+     saved nav state back, so you stay on Settings. That remount would wipe an
+     unsaved Log session, so LogScreen keeps its draft in a module variable
+     (`unsavedDraft`, fed by SessionEditor's `onDraftChange`) — memory only,
+     cleared on save or when a template is loaded.
+   - Adding UI text: wrap it in `t()`, add the Malay to `MS`, then re-run the
+     coverage check (extract every `t`/`tn` key, compare with `MS`, compare
+     `{placeholders}`) — see the v11 verification entry.
 
 ## Storage
 
@@ -719,6 +755,29 @@ confirmed all 3 persisted correctly with exact same values.")
   Hermes bundle contains "Targets", "Tap a muscle", LOWER BACK / ADDUCTORS /
   OBLIQUES and the CORE → ABS migration SQL.
 
+- v11 verified (2026-10-06): `npx tsc --noEmit` clean; `npx expo export
+  --platform android` bundled 1137 modules. Translation coverage: a script
+  extracted all 181 `t()` / `tn()` keys from the source → 0 missing from `MS`,
+  0 unused entries, 0 placeholder mismatches, all 17 muscle labels present; a
+  sweep for unwrapped JSX text found only the intentional "WS", "IRON LOG"
+  and the pre-prefs database error. 19 runtime checks (theme/i18n/prefs
+  bundled against better-sqlite3 seeded with the v10 schema): a `themed()`
+  sheet returns orange/dark, then blue/black after `applyTheme`, and is cached
+  between changes; primarySoft/heat/muscle greys follow; Malay text,
+  placeholders, no-plural form, English fallback and muscle labels; Malay date
+  "Sel, 6 Okt 2026" (Node ICU — Hermes uses Android's Intl, not checked
+  on-device); backup errors translated; settings table created on an old DB,
+  defaults when empty, save → reload applies, junk values ("rainbow", "fr",
+  "white") fall back, 3 rows after repeated saves, workout data untouched.
+  Share card rendered in Malay with blue / pink accents and in English with
+  lime: Malay pills (LENGAN BAWAH) and stat labels fit, accent carries
+  through brand, PR words, pills, muscle map and barbell.
+
+- v11 APK verified (2026-10-06): `scripts/build-apk.sh` exit 0 (stages 50s /
+  47s / 1m37s). `apksigner verify` passes; the Hermes bundle contains "Simpan
+  sesi", "Bahasa Melayu", "Hitam pekat", "LENGAN BAWAH", "Kalendar latihan",
+  "Accent colour", the `ms-MY` locale and the settings-table DDL.
+
 ## Blockers / known issues
 
 (Document anything infeasible, any fallback taken instead of the original
@@ -821,7 +880,7 @@ plan, or anything left unfinished, with reasoning.)
 ## Final build
 
 - Local APK: latest build is whatever `scripts/build-apk.sh` last produced
-  (v10 on 2026-10-06; the cold v3 build of 2026-09-17 is described here) —
+  (v11 on 2026-10-06; the cold v3 build of 2026-09-17 is described here) —
   `iron-log.apk` at the project root (gitignored via `*.apk`), 34 MiB,
   arm64-v8a, signed with the debug keystore (fine for sideloading; generate a
   real keystore only if you ever publish to the Play Store). Built with

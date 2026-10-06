@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useRef, useState } from 'react';
-import { KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { KeyboardAvoidingView, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { getLastUseForExercise } from '../db/repository';
-import { colors, fontSize, radius, spacing } from '../theme';
+import { colors, fontSize, radius, spacing, themed } from '../theme';
 import type { Exercise, ExerciseCatalogEntry } from '../types';
 import { draftsToExercises, makeDraftExercise, type DraftExercise } from '../utils/sessionDraft';
 import { Button } from './Button';
@@ -10,6 +10,7 @@ import { DateField } from './DateField';
 import { ExerciseCard } from './ExerciseCard';
 import { ExercisePicker } from './ExercisePicker';
 import { OptionSheet } from './OptionSheet';
+import { t } from '../i18n';
 
 interface SessionEditorProps {
   initialDate: string;
@@ -24,7 +25,16 @@ interface SessionEditorProps {
   /** Height of anything above this editor that isn't part of its parent's frame, e.g. a stack header. */
   keyboardOffset?: number;
   onSave: (date: string, name: string, exercises: Exercise[], notes: string) => void;
+  /** Called with the whole draft on every change, so a parent can hold on to unsaved work. */
+  onDraftChange?: (draft: EditorDraft) => void;
   extraActions?: React.ReactNode;
+}
+
+export interface EditorDraft {
+  date: string;
+  name: string;
+  notes: string;
+  exercises: DraftExercise[];
 }
 
 /** Leaves a little of the previous card visible above whatever we scroll to. */
@@ -42,6 +52,7 @@ export function SessionEditor({
   saving,
   keyboardOffset = 0,
   onSave,
+  onDraftChange,
   extraActions,
 }: SessionEditorProps) {
   const [date, setDate] = useState(initialDate);
@@ -52,6 +63,12 @@ export function SessionEditor({
   const scrollRef = useRef<ScrollView>(null);
   const cardY = useRef(new Map<string, number>());
   const scrollToNewKey = useRef<string | null>(null);
+
+  useEffect(() => {
+    onDraftChange?.({ date, name, notes, exercises });
+    // onDraftChange is a fresh closure each render; only the draft itself matters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, name, notes, exercises]);
 
   function scrollTo(y: number) {
     scrollRef.current?.scrollTo({ y: Math.max(0, y - SCROLL_MARGIN), animated: true });
@@ -131,7 +148,7 @@ export function SessionEditor({
           <Ionicons name="pricetag-outline" size={18} color={name ? colors.primary : colors.textMuted} />
           <TextInput
             style={styles.nameInput}
-            placeholder="Session name (optional) — e.g. PUSH DAY"
+            placeholder={t('Session name (optional) — e.g. PUSH DAY')}
             placeholderTextColor={colors.textFaint}
             value={name}
             onChangeText={setName}
@@ -160,7 +177,9 @@ export function SessionEditor({
         {exercises.length === 0 && (
           <View style={styles.hint}>
             <Ionicons name="arrow-up-circle-outline" size={20} color={colors.textFaint} />
-            <Text style={styles.hintText}>Add your first exercise above. Known exercises auto-fill your last weight, reps, muscle group and machine.</Text>
+            <Text style={styles.hintText}>
+              {t('Add your first exercise above. Known exercises auto-fill your last weight, reps, muscle group and machine.')}
+            </Text>
           </View>
         )}
 
@@ -179,10 +198,10 @@ export function SessionEditor({
         ))}
 
         <View style={styles.notesWrap}>
-          <Text style={styles.notesLabel}>SESSION NOTES</Text>
+          <Text style={styles.notesLabel}>{t('SESSION NOTES')}</Text>
           <TextInput
             style={styles.notesInput}
-            placeholder="How it went, how you slept, anything to remember…"
+            placeholder={t('How it went, how you slept, anything to remember…')}
             placeholderTextColor={colors.textFaint}
             value={notes}
             onChangeText={setNotes}
@@ -196,7 +215,7 @@ export function SessionEditor({
 
       <OptionSheet
         visible={pickingName}
-        title="Session name"
+        title={t('Session name')}
         options={recentNames.map((n) => ({ value: n, label: n }))}
         selected={name.trim() || null}
         onClose={() => setPickingName(false)}
@@ -209,7 +228,7 @@ export function SessionEditor({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   flex: {
     flex: 1,
   },
@@ -287,4 +306,4 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm + 4,
     textAlignVertical: 'top',
   },
-});
+}));

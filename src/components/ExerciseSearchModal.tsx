@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
-import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors, fontSize, radius, spacing } from '../theme';
+import { colors, fontSize, radius, spacing, themed } from '../theme';
 import { MUSCLE_GROUPS } from '../types';
+import { muscleLabel, t, tn } from '../i18n';
 
 export interface ExerciseSearchEntry {
   name: string;
@@ -55,7 +56,7 @@ export function ExerciseSearchModal({ visible, entries, selected, allowCreate, o
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} statusBarTranslucent={false}>
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.header}>
-          <Text style={styles.title}>Exercises</Text>
+          <Text style={styles.title}>{t('Exercises')}</Text>
           <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={8}>
             <Ionicons name="close" size={22} color={colors.text} />
           </Pressable>
@@ -65,7 +66,7 @@ export function ExerciseSearchModal({ visible, entries, selected, allowCreate, o
           <Ionicons name="search" size={18} color={colors.textMuted} />
           <TextInput
             style={styles.searchInput}
-            placeholder="SEARCH EXERCISES"
+            placeholder={t('SEARCH EXERCISES')}
             placeholderTextColor={colors.textFaint}
             value={query}
             onChangeText={(v) => setQuery(v.toUpperCase())}
@@ -91,18 +92,18 @@ export function ExerciseSearchModal({ visible, entries, selected, allowCreate, o
             keyboardShouldPersistTaps="handled"
           >
             <Pressable style={[styles.chip, group === null && styles.chipActive]} onPress={() => setGroup(null)}>
-              <Text style={[styles.chipText, group === null && styles.chipTextActive]}>ALL</Text>
+              <Text style={[styles.chipText, group === null && styles.chipTextActive]}>{t('ALL')}</Text>
             </Pressable>
             {groups.map((g) => (
               <Pressable key={g} style={[styles.chip, group === g && styles.chipActive]} onPress={() => setGroup(group === g ? null : g)}>
-                <Text style={[styles.chipText, group === g && styles.chipTextActive]}>{g}</Text>
+                <Text style={[styles.chipText, group === g && styles.chipTextActive]}>{muscleLabel(g)}</Text>
               </Pressable>
             ))}
           </ScrollView>
         )}
 
         <Text style={styles.count}>
-          {filtered.length} of {entries.length} exercise{entries.length === 1 ? '' : 's'}
+          {tn(entries.length, '{shown} of {n} exercise', '{shown} of {n} exercises', { shown: filtered.length })}
         </Text>
 
         <FlatList
@@ -114,14 +115,14 @@ export function ExerciseSearchModal({ visible, entries, selected, allowCreate, o
             canCreate ? (
               <Pressable style={[styles.row, styles.createRow]} onPress={() => onSelect(q)}>
                 <Ionicons name="add-circle" size={22} color={colors.primary} />
-                <Text style={styles.createText}>Add “{q}”</Text>
+                <Text style={styles.createText}>{t('Add “{name}”', { name: q })}</Text>
               </Pressable>
             ) : null
           }
           ListEmptyComponent={
             <View style={styles.empty}>
               <Ionicons name="barbell-outline" size={28} color={colors.textFaint} />
-              <Text style={styles.emptyText}>{entries.length === 0 ? 'No exercises yet' : 'No matches'}</Text>
+              <Text style={styles.emptyText}>{entries.length === 0 ? t('No exercises yet') : t('No matches')}</Text>
             </View>
           }
           renderItem={({ item }) => {
@@ -130,7 +131,7 @@ export function ExerciseSearchModal({ visible, entries, selected, allowCreate, o
               <Pressable style={[styles.row, active && styles.rowActive]} onPress={() => onSelect(item.name)}>
                 <View style={styles.rowText}>
                   <Text style={[styles.rowName, active && styles.rowNameActive]}>{item.name}</Text>
-                  {item.muscleGroup ? <Text style={styles.rowSub}>{item.muscleGroup}</Text> : null}
+                  {item.muscleGroup ? <Text style={styles.rowSub}>{muscleLabel(item.muscleGroup)}</Text> : null}
                 </View>
                 {active && <Ionicons name="checkmark" size={20} color={colors.primary} />}
               </Pressable>
@@ -142,7 +143,7 @@ export function ExerciseSearchModal({ visible, entries, selected, allowCreate, o
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -287,4 +288,4 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: fontSize.small,
   },
-});
+}));

@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
 import { FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, fontSize, radius, spacing } from '../theme';
+import { colors, fontSize, radius, spacing, themed } from '../theme';
+import { t } from '../i18n';
 
 export interface Option {
   value: string;
@@ -52,7 +53,7 @@ export function OptionSheet({ visible, title, options, selected, onSelect, onClo
             <Ionicons name="search" size={16} color={colors.textMuted} />
             <TextInput
               style={styles.searchInput}
-              placeholder="SEARCH"
+              placeholder={t('SEARCH')}
               placeholderTextColor={colors.textFaint}
               value={query}
               onChangeText={(v) => setQuery(v.toUpperCase())}
@@ -66,7 +67,7 @@ export function OptionSheet({ visible, title, options, selected, onSelect, onClo
           keyExtractor={(o) => o.value || '__blank'}
           keyboardShouldPersistTaps="handled"
           style={styles.list}
-          ListEmptyComponent={<Text style={styles.empty}>Nothing matches.</Text>}
+          ListEmptyComponent={<Text style={styles.empty}>{t('Nothing matches.')}</Text>}
           renderItem={({ item, index }) => {
             const active = item.value === selected;
             return (
@@ -111,7 +112,7 @@ export function SelectField({ label, value, onPress, icon }: SelectFieldProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   backdrop: {
     ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0, 0, 0, 0.55)',
@@ -228,4 +229,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 1,
   },
-});
+}));

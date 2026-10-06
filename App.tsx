@@ -1,20 +1,36 @@
+import type { NavigationState } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { getDb } from './src/db/database';
 import { RootNavigator } from './src/navigation/RootNavigator';
-import { colors, spacing } from './src/theme';
+import { PrefsContext, applyPrefs, loadPrefs, savePrefs, type Prefs } from './src/prefs';
+import { colors, spacing, themed } from './src/theme';
 
 export default function App() {
-  const [ready, setReady] = useState(false);
+  const [prefs, setPrefs] = useState<Prefs | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Bumped on every settings change; keying the tree on it redraws every screen with
+  // the new colours/language, and navState puts you back where you were.
+  const [version, setVersion] = useState(0);
+  const navState = useRef<NavigationState | undefined>(undefined);
 
   useEffect(() => {
     getDb()
-      .then(() => setReady(true))
+      .then(loadPrefs)
+      .then(setPrefs)
       .catch((e) => setError(String(e)));
   }, []);
+
+  function update(change: Partial<Prefs>) {
+    if (!prefs) return;
+    const next = { ...prefs, ...change };
+    applyPrefs(next);
+    setPrefs(next);
+    setVersion((v) => v + 1);
+    savePrefs(next).catch(() => {});
+  }
 
   if (error) {
     return (
@@ -25,7 +41,7 @@ export default function App() {
     );
   }
 
-  if (!ready) {
+  if (!prefs) {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={colors.primary} />
@@ -36,12 +52,14 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
-      <RootNavigator />
+      <PrefsContext.Provider value={{ prefs, update }}>
+        <RootNavigator key={version} initialState={navState.current} onStateChange={(s) => (navState.current = s)} />
+      </PrefsContext.Provider>
     </SafeAreaProvider>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   center: {
     flex: 1,
     backgroundColor: colors.background,
@@ -59,4 +77,4 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     textAlign: 'center',
   },
-});
+}));

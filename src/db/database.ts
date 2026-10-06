@@ -61,6 +61,12 @@ async function openAndMigrate(): Promise<SQLite.SQLiteDatabase> {
     CREATE INDEX IF NOT EXISTS idx_session_exercises_name ON session_exercises(name COLLATE NOCASE);
     CREATE INDEX IF NOT EXISTS idx_sets_session_exercise_id ON sets(session_exercise_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_date ON sessions(date);
+
+    -- v11: app preferences (language, accent, background) as plain key/value rows.
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
   `);
 
   // Additive migrations for databases created before these columns existed.

@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import React, { useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, fontSize, radius, spacing } from '../theme';
+import { Platform, Pressable, Text, View } from 'react-native';
+import { colors, fontSize, radius, spacing, themed } from '../theme';
 import { dateToString, formatDateDisplay, parseDateString } from '../utils/date';
+import { t } from '../i18n';
 
 interface DateFieldProps {
   date: string; // YYYY-MM-DD
@@ -27,7 +28,7 @@ export function DateField({ date, onChange }: DateFieldProps) {
           <Ionicons name="calendar-outline" size={18} color={colors.primary} />
         </View>
         <View style={styles.text}>
-          <Text style={styles.label}>DATE</Text>
+          <Text style={styles.label}>{t('DATE')}</Text>
           <Text style={styles.value}>{formatDateDisplay(date)}</Text>
         </View>
         <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
@@ -44,7 +45,7 @@ export function DateField({ date, onChange }: DateFieldProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   field: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -82,4 +83,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 1,
   },
-});
+}));

@@ -1,6 +1,6 @@
 import React from 'react';
-import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
-import { colors, fontSize, radius, spacing } from '../theme';
+import { Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { colors, fontSize, radius, spacing, themed } from '../theme';
 
 interface CardProps {
   children: React.ReactNode;
@@ -25,7 +25,7 @@ export function CardTitle({ title, right }: CardTitleProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -47,4 +47,4 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
-});
+}));

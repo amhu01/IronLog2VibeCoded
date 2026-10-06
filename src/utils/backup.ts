@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import type { Exercise, Session, SetEntry } from '../types';
 
 export type ImportedSession = Omit<Session, 'id'>;
@@ -8,16 +9,16 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 
 export function parseBackup(raw: unknown): ImportedSession[] {
   const list = Array.isArray(raw) ? raw : isPlainObject(raw) && Array.isArray(raw.sessions) ? raw.sessions : null;
-  if (!list) throw new Error('Backup must be a JSON array of sessions (or an object with a "sessions" array).');
+  if (!list) throw new Error(t('Backup must be a JSON array of sessions (or an object with a "sessions" array).'));
 
   return list.map((s, i) => {
     if (!isPlainObject(s) || typeof s.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s.date)) {
-      throw new Error(`Session ${i + 1} is missing a valid date (YYYY-MM-DD).`);
+      throw new Error(t('Session {n} is missing a valid date (YYYY-MM-DD).', { n: i + 1 }));
     }
     const exercisesRaw = Array.isArray(s.exercises) ? s.exercises : [];
     const exercises: Exercise[] = exercisesRaw.map((e, j) => {
       if (!isPlainObject(e) || typeof e.name !== 'string' || !e.name.trim()) {
-        throw new Error(`Session ${i + 1}, exercise ${j + 1} is missing a name.`);
+        throw new Error(t('Session {n}, exercise {m} is missing a name.', { n: i + 1, m: j + 1 }));
       }
       const setsRaw = Array.isArray(e.sets) ? e.sets : [];
       const sets: SetEntry[] = setsRaw.map((st) => {

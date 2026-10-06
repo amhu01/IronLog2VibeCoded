@@ -5,16 +5,24 @@ import { FIGURE_H, FIGURE_W, MuscleFigure, muscleScale } from './MuscleMap';
 import { GROUP_REGIONS, regionLevels } from './muscleMapShapes';
 import { formatDateDisplay } from '../utils/date';
 import { formatVolume } from '../utils/format';
+import { muscleLabel, t } from '../i18n';
+import { colors } from '../theme';
 
 export const CARD_WIDTH = 1080;
 
 const PAD = 72;
 const CONTENT_WIDTH = CARD_WIDTH - PAD * 2;
-const ORANGE = '#ff8a3d';
-const ORANGE_LIGHT = '#ffb27a';
+// The card follows the app's accent colour; read at render time since it can change.
+const accent = () => colors.primary;
+/** The accent mixed 45% toward white, for pill text and the barbell's inner plates. */
+function accentLight(): string {
+  const n = parseInt(colors.primary.slice(1), 16);
+  const mix = (v: number) => Math.round(v + (255 - v) * 0.45);
+  return `rgb(${mix((n >> 16) & 255)}, ${mix((n >> 8) & 255)}, ${mix(n & 255)})`;
+}
 const WHITE = '#ffffff';
 const MAP_WIDTH = 380;
-const MAP_SCALE = muscleScale('#4a5263', ORANGE);
+
 
 // Word art: every lift once (big, sized by work done), then repeated as faint filler
 // until the words alone trace a shape (dumbbell, kettlebell…). No outline is drawn.
@@ -418,7 +426,7 @@ function CloudText({ word, offsetY }: { word: CloudWord; offsetY: number }) {
       <G transform="translate(0, 3)">
         <G transform={rotate}>{glyphs('#000000', 0.5 * word.opacity)}</G>
       </G>
-      <G transform={rotate}>{glyphs(word.isPR ? ORANGE : WHITE, word.opacity)}</G>
+      <G transform={rotate}>{glyphs(word.isPR ? accent() : WHITE, word.opacity)}</G>
     </G>
   );
 }
@@ -467,7 +475,7 @@ interface Layout {
   pillsY: number;
   pills: ReturnType<typeof layoutPills>;
   statsY: number;
-  stats: { value: string; label: string }[];
+  stats: { value: string; label: string; pr?: boolean }[];
   dividerY: number;
   cloudY: number;
   cloud: ReturnType<typeof layoutShape>;
@@ -504,21 +512,21 @@ function computeLayout(summary: SessionSummary, shape: CardShape): Layout {
 
   // Title, date and pills share the row with the map, so they get what's left of it.
   const titleWidth = map ? CONTENT_WIDTH - MAP_WIDTH - 36 : CONTENT_WIDTH;
-  const titleText = (summary.name || 'WORKOUT').toUpperCase();
+  const titleText = (summary.name || t('WORKOUT')).toUpperCase();
   const titleSize = [72, 56, 44].find((size) => textWidth(titleText, size, 800) <= titleWidth) ?? 44;
 
-  const pills = layoutPills(summary.muscleGroups, titleWidth);
+  const pills = layoutPills(summary.muscleGroups.map(muscleLabel), titleWidth);
   let y = 236 + 60; // eyebrow + title + date block
   const pillsY = y;
   y += pills.height;
   if (map) y = Math.max(y, map.y + FIGURE_H * mapSize + 8);
 
-  const stats: { value: string; label: string }[] = [
-    { value: formatVolume(summary.volume), label: 'VOLUME KG' },
-    { value: String(summary.setCount), label: 'SETS' },
-    { value: String(summary.exerciseCount), label: 'LIFTS' },
+  const stats: { value: string; label: string; pr?: boolean }[] = [
+    { value: formatVolume(summary.volume), label: t('VOLUME KG') },
+    { value: String(summary.setCount), label: t('SETS') },
+    { value: String(summary.exerciseCount), label: t('LIFTS') },
   ];
-  if (summary.prCount > 0) stats.push({ value: String(summary.prCount), label: summary.prCount === 1 ? 'NEW PR' : 'NEW PRS' });
+  if (summary.prCount > 0) stats.push({ value: String(summary.prCount), label: summary.prCount === 1 ? t('NEW PR') : t('NEW PRS'), pr: true });
 
   const statsY = y + 80;
   y = statsY + 90;
@@ -590,11 +598,11 @@ function Barbell({ x, y, scale = 1 }: { x: number; y: number; scale?: number }) 
   const s = (n: number) => n * scale;
   return (
     <G x={x} y={y} opacity={0.95}>
-      <Rect x={s(0)} y={s(14)} width={s(96)} height={s(8)} rx={s(4)} fill={ORANGE} />
-      <Rect x={s(10)} y={s(2)} width={s(10)} height={s(32)} rx={s(4)} fill={ORANGE} />
-      <Rect x={s(24)} y={s(7)} width={s(8)} height={s(22)} rx={s(3)} fill={ORANGE_LIGHT} />
-      <Rect x={s(76)} y={s(2)} width={s(10)} height={s(32)} rx={s(4)} fill={ORANGE} />
-      <Rect x={s(64)} y={s(7)} width={s(8)} height={s(22)} rx={s(3)} fill={ORANGE_LIGHT} />
+      <Rect x={s(0)} y={s(14)} width={s(96)} height={s(8)} rx={s(4)} fill={accent()} />
+      <Rect x={s(10)} y={s(2)} width={s(10)} height={s(32)} rx={s(4)} fill={accent()} />
+      <Rect x={s(24)} y={s(7)} width={s(8)} height={s(22)} rx={s(3)} fill={accentLight()} />
+      <Rect x={s(76)} y={s(2)} width={s(10)} height={s(32)} rx={s(4)} fill={accent()} />
+      <Rect x={s(64)} y={s(7)} width={s(8)} height={s(22)} rx={s(3)} fill={accentLight()} />
     </G>
   );
 }
@@ -618,14 +626,14 @@ export const ShareCard = forwardRef<React.ElementRef<typeof Svg>, ShareCardProps
     const rowY = L.pillsY + rowIndex * 66;
     return row.map((pill) => (
       <G key={pill.text}>
-        <Rect x={pill.x} y={rowY} width={pill.w} height={52} rx={26} fill={ORANGE} opacity={0.22} />
-        <Rect x={pill.x} y={rowY} width={pill.w} height={52} rx={26} fill="none" stroke={ORANGE} strokeWidth={2} opacity={0.9} />
+        <Rect x={pill.x} y={rowY} width={pill.w} height={52} rx={26} fill={accent()} opacity={0.22} />
+        <Rect x={pill.x} y={rowY} width={pill.w} height={52} rx={26} fill="none" stroke={accent()} strokeWidth={2} opacity={0.9} />
         <SvgText
           x={pill.x + pill.w / 2}
           y={rowY + 35}
           fontSize={26}
           fontWeight="800"
-          fill={ORANGE_LIGHT}
+          fill={accentLight()}
           textAnchor="middle"
           letterSpacing={1.5}
         >
@@ -641,7 +649,7 @@ export const ShareCard = forwardRef<React.ElementRef<typeof Svg>, ShareCardProps
     <Svg ref={ref} width={width} height={height} viewBox={`0 0 ${CARD_WIDTH} ${L.height}`}>
       {scrim ? <Rect x={0} y={0} width={CARD_WIDTH} height={L.height} rx={48} fill="#0b0d12" opacity={0.62} /> : null}
 
-      <Shadowed x={PAD} y={96} fontSize={30} fontWeight="800" fill={ORANGE} letterSpacing={8}>
+      <Shadowed x={PAD} y={96} fontSize={30} fontWeight="800" fill={accent()} letterSpacing={8}>
         IRON LOG
       </Shadowed>
       <Shadowed x={PAD} y={182} fontSize={L.titleSize} fontWeight="800">
@@ -659,7 +667,7 @@ export const ShareCard = forwardRef<React.ElementRef<typeof Svg>, ShareCardProps
           y={L.map.y}
           size={L.map.size}
           levels={L.map.levels}
-          scale={MAP_SCALE}
+          scale={muscleScale('#4a5263', accent())}
           neutral="#2a303d"
           labelColor={WHITE}
           labels={false}
@@ -668,7 +676,7 @@ export const ShareCard = forwardRef<React.ElementRef<typeof Svg>, ShareCardProps
 
       {L.stats.map((s, i) => (
         <G key={s.label}>
-          <Shadowed x={PAD + colWidth * i} y={L.statsY} fontSize={66} fontWeight="800" fill={s.label.includes('PR') ? ORANGE : WHITE}>
+          <Shadowed x={PAD + colWidth * i} y={L.statsY} fontSize={66} fontWeight="800" fill={s.pr ? accent() : WHITE}>
             {s.value}
           </Shadowed>
           <Shadowed x={PAD + colWidth * i} y={L.statsY + 42} fontSize={22} fontWeight="800" opacity={0.72} letterSpacing={1.2}>

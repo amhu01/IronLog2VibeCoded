@@ -10,10 +10,11 @@ import { MuscleMap } from '../components/MuscleMap';
 import { regionLevels } from '../components/muscleMapShapes';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { getStats } from '../db/repository';
-import { colors, fontSize, radius, spacing } from '../theme';
+import { colors, fontSize, radius, spacing, themed } from '../theme';
 import type { MuscleGroupSets, StatsSummary } from '../types';
 import { formatDateDisplay } from '../utils/date';
 import { formatWeight } from '../utils/format';
+import { muscleLabel, t, tn } from '../i18n';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -37,21 +38,21 @@ function MuscleBars({ rows }: { rows: MuscleGroupSets[] }) {
   const tagged = rows.filter((r) => r.muscleGroup !== '');
   const untagged = rows.find((r) => r.muscleGroup === '')?.sets ?? 0;
   if (tagged.length === 0) {
-    return <Text style={styles.cardBody}>{untagged > 0 ? 'Tag exercises with a muscle group to see the split.' : 'No sets in this range.'}</Text>;
+    return <Text style={styles.cardBody}>{untagged > 0 ? t('Tag exercises with a muscle group to see the split.') : t('No sets in this range.')}</Text>;
   }
   const max = Math.max(...tagged.map((r) => r.sets));
   return (
     <View>
       {tagged.map((r) => (
         <View key={r.muscleGroup} style={styles.barRow}>
-          <Text style={styles.barLabel}>{r.muscleGroup}</Text>
+          <Text style={styles.barLabel}>{muscleLabel(r.muscleGroup)}</Text>
           <View style={styles.barTrack}>
             <View style={[styles.barFill, { width: `${Math.max(4, (r.sets / max) * 100)}%` }]} />
           </View>
           <Text style={styles.barValue}>{r.sets}</Text>
         </View>
       ))}
-      {untagged > 0 && <Text style={styles.untagged}>+ {untagged} untagged set{untagged === 1 ? '' : 's'}</Text>}
+      {untagged > 0 && <Text style={styles.untagged}>{tn(untagged, '+ {n} untagged set', '+ {n} untagged sets')}</Text>}
     </View>
   );
 }
@@ -69,32 +70,36 @@ export function StatsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScreenHeader title="Stats" subtitle={stats && stats.totalSessions > 0 ? 'All time' : undefined} />
+      <ScreenHeader title={t('Stats')} subtitle={stats && stats.totalSessions > 0 ? t('All time') : undefined} />
       {stats && stats.totalSessions === 0 && (
-        <EmptyState icon="stats-chart-outline" title="No stats yet" body="Your numbers will appear after your first logged session." />
+        <EmptyState
+          icon="stats-chart-outline"
+          title={t('No stats yet')}
+          body={t('Your numbers will appear after your first logged session.')}
+        />
       )}
       {stats && stats.totalSessions > 0 && (
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.grid}>
-            <StatTile label="Sessions" value={stats.totalSessions} icon="calendar-outline" />
-            <StatTile label="Exercises" value={stats.distinctExercises} icon="barbell-outline" />
-            <StatTile label="Last 7 days" value={stats.sessionsLast7Days} icon="flame-outline" />
-            <StatTile label="Weeks training" value={stats.weeksSinceFirstSession} icon="time-outline" />
+            <StatTile label={t('Sessions')} value={stats.totalSessions} icon="calendar-outline" />
+            <StatTile label={t('Exercises')} value={stats.distinctExercises} icon="barbell-outline" />
+            <StatTile label={t('Last 7 days')} value={stats.sessionsLast7Days} icon="flame-outline" />
+            <StatTile label={t('Weeks training')} value={stats.weeksSinceFirstSession} icon="time-outline" />
           </View>
 
           <Card>
-            <CardTitle title="Training calendar" />
+            <CardTitle title={t('Training calendar')} />
             <ActivityHeatmap activity={stats.activity} />
           </Card>
 
           <Card>
             <CardTitle
-              title="Sets by muscle group"
+              title={t('Sets by muscle group')}
               right={
                 <View style={styles.segment}>
                   {(['week', 'all'] as const).map((r) => (
                     <Pressable key={r} style={[styles.segmentBtn, range === r && styles.segmentBtnActive]} onPress={() => setRange(r)}>
-                      <Text style={[styles.segmentText, range === r && styles.segmentTextActive]}>{r === 'week' ? '7 DAYS' : 'ALL'}</Text>
+                      <Text style={[styles.segmentText, range === r && styles.segmentTextActive]}>{r === 'week' ? t('7 DAYS') : t('ALL')}</Text>
                     </Pressable>
                   ))}
                 </View>
@@ -106,7 +111,7 @@ export function StatsScreen() {
                 groups
                   .map((g) => {
                     const n = setsByGroup(muscleRows)[g] ?? 0;
-                    return `${g}: ${n} set${n === 1 ? '' : 's'}`;
+                    return tn(n, '{group}: {n} set', '{group}: {n} sets', { group: muscleLabel(g) });
                   })
                   .join('  ·  ')
               }
@@ -116,7 +121,7 @@ export function StatsScreen() {
           </Card>
 
           <Card>
-            <CardTitle title="Most trained" />
+            <CardTitle title={t('Most trained')} />
             {stats.mostTrainedExercise ? (
               <View style={styles.mostRow}>
                 <View style={styles.trophy}>
@@ -125,18 +130,18 @@ export function StatsScreen() {
                 <View style={styles.mostText}>
                   <Text style={styles.mostName}>{stats.mostTrainedExercise.name}</Text>
                   <Text style={styles.mostMeta}>
-                    {stats.mostTrainedExercise.sessionCount} session{stats.mostTrainedExercise.sessionCount === 1 ? '' : 's'}
+                    {tn(stats.mostTrainedExercise.sessionCount, '{n} session', '{n} sessions')}
                   </Text>
                 </View>
               </View>
             ) : (
-              <Text style={styles.cardBody}>No sessions yet</Text>
+              <Text style={styles.cardBody}>{t('No sessions yet')}</Text>
             )}
           </Card>
 
           <Card>
-            <CardTitle title="Personal bests" />
-            {stats.personalBests.length === 0 && <Text style={styles.cardBody}>No sessions yet</Text>}
+            <CardTitle title={t('Personal bests')} />
+            {stats.personalBests.length === 0 && <Text style={styles.cardBody}>{t('No sessions yet')}</Text>}
             {stats.personalBests.map((pb, i) => (
               <View key={`${pb.exerciseName}|${pb.machine}`} style={[styles.pbRow, i === stats.personalBests.length - 1 && styles.pbRowLast]}>
                 <View style={styles.pbIcon}>
@@ -158,7 +163,7 @@ export function StatsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -335,4 +340,4 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: fontSize.body,
   },
-});
+}));

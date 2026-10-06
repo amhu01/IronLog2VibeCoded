@@ -17,12 +17,13 @@ import {
   updateSession,
 } from '../db/repository';
 import type { RootTabParamList, SessionStackParamList } from '../navigation/types';
-import { colors, fontSize, radius, spacing } from '../theme';
+import { colors, fontSize, radius, spacing, themed } from '../theme';
 import type { Exercise, ExerciseCatalogEntry, Session } from '../types';
 import { formatDateDisplay } from '../utils/date';
 import { formatVolume, formatWeight } from '../utils/format';
 import { exerciseToDraft } from '../utils/sessionDraft';
 import { countSets, sessionVolume, setEffectiveWeight } from '../utils/stats';
+import { muscleLabel, t, tn } from '../i18n';
 
 type Props = NativeStackScreenProps<SessionStackParamList, 'SessionDetail'>;
 
@@ -58,10 +59,10 @@ export function SessionDetailScreen({ route, navigation }: Props) {
   );
 
   function handleDelete() {
-    Alert.alert('Delete session', 'This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('Delete session'), t('This cannot be undone.'), [
+      { text: t('Cancel'), style: 'cancel' },
       {
-        text: 'Delete',
+        text: t('Delete'),
         style: 'destructive',
         onPress: async () => {
           await deleteSession(sessionId);
@@ -85,7 +86,7 @@ export function SessionDetailScreen({ route, navigation }: Props) {
       setEditing(false);
       load();
     } catch (e) {
-      Alert.alert('Failed to save', String(e));
+      Alert.alert(t('Failed to save'), String(e));
     } finally {
       setSaving(false);
     }
@@ -94,7 +95,7 @@ export function SessionDetailScreen({ route, navigation }: Props) {
   if (!session) {
     return (
       <View style={styles.container}>
-        <Text style={styles.loading}>Loading…</Text>
+        <Text style={styles.loading}>{t('Loading…')}</Text>
       </View>
     );
   }
@@ -110,13 +111,13 @@ export function SessionDetailScreen({ route, navigation }: Props) {
           catalog={catalog}
           allMachines={machines}
           recentNames={recentNames}
-          saveLabel="Save changes"
+          saveLabel={t('Save changes')}
           saving={saving}
           keyboardOffset={headerHeight}
           onSave={handleSave}
           extraActions={
             <View style={styles.cancelWrap}>
-              <Button title="Cancel" variant="ghost" onPress={() => setEditing(false)} />
+              <Button title={t('Cancel')} variant="ghost" onPress={() => setEditing(false)} />
             </View>
           }
         />
@@ -127,10 +128,10 @@ export function SessionDetailScreen({ route, navigation }: Props) {
   const totalSets = countSets(session.exercises);
   const volume = sessionVolume(session.exercises);
   const metaParts = [
-    `${session.exercises.length} exercise${session.exercises.length === 1 ? '' : 's'}`,
-    `${totalSets} set${totalSets === 1 ? '' : 's'}`,
+    tn(session.exercises.length, '{n} exercise', '{n} exercises'),
+    tn(totalSets, '{n} set', '{n} sets'),
   ];
-  if (volume > 0) metaParts.push(`${formatVolume(volume)} volume`);
+  if (volume > 0) metaParts.push(t('{v} volume', { v: formatVolume(volume) }));
 
   return (
     <View style={styles.container}>
@@ -163,9 +164,9 @@ export function SessionDetailScreen({ route, navigation }: Props) {
             </View>
             {(ex.muscleGroup || ex.machine || ex.hasBaseResistance) && (
               <View style={styles.exTags}>
-                {ex.muscleGroup ? <Tag text={ex.muscleGroup} accent /> : null}
+                {ex.muscleGroup ? <Tag text={muscleLabel(ex.muscleGroup)} accent /> : null}
                 {ex.machine ? <Tag text={ex.machine} /> : null}
-                {ex.hasBaseResistance ? <Tag text={`base ${formatWeight(ex.baseResistance ?? 0)}`} /> : null}
+                {ex.hasBaseResistance ? <Tag text={t('base {w}', { w: formatWeight(ex.baseResistance ?? 0) })} /> : null}
               </View>
             )}
             {ex.notes ? <Text style={styles.exNotes}>{ex.notes}</Text> : null}
@@ -173,12 +174,12 @@ export function SessionDetailScreen({ route, navigation }: Props) {
               const effective = ex.hasBaseResistance ? setEffectiveWeight(ex, s.weight) : null;
               return (
                 <View key={j} style={[styles.setRow, j === ex.sets.length - 1 && styles.setRowLast]}>
-                  <Text style={styles.setIndex}>SET {j + 1}</Text>
+                  <Text style={styles.setIndex}>{t('SET {n}', { n: j + 1 })}</Text>
                   <Text style={styles.setValue}>
                     {s.weight} × {s.reps}
                   </Text>
                   <View style={styles.setTags}>
-                    {effective !== null && <Tag text={`eff ${formatWeight(effective)}`} />}
+                    {effective !== null && <Tag text={t('eff {w}', { w: formatWeight(effective) })} />}
                     {s.ws && <Tag text="WS" accent />}
                   </View>
                 </View>
@@ -189,23 +190,23 @@ export function SessionDetailScreen({ route, navigation }: Props) {
 
         <View style={styles.actions}>
           <Button
-            title="Summary & share"
+            title={t('Summary & share')}
             icon="share-social-outline"
             onPress={() => navigation.navigate('SessionSummary', { sessionId })}
           />
           <View style={styles.gap} />
-          <Button title="Repeat this session" variant="secondary" icon="repeat" onPress={handleRepeat} />
+          <Button title={t('Repeat this session')} variant="secondary" icon="repeat" onPress={handleRepeat} />
           <View style={styles.gap} />
-          <Button title="Edit session" variant="secondary" icon="create-outline" onPress={() => setEditing(true)} />
+          <Button title={t('Edit session')} variant="secondary" icon="create-outline" onPress={() => setEditing(true)} />
           <View style={styles.gap} />
-          <Button title="Delete session" variant="ghostDanger" icon="trash-outline" onPress={handleDelete} />
+          <Button title={t('Delete session')} variant="ghostDanger" icon="trash-outline" onPress={handleDelete} />
         </View>
       </ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -343,4 +344,4 @@ const styles = StyleSheet.create({
   cancelWrap: {
     marginTop: spacing.sm,
   },
-});
+}));

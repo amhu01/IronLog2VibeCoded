@@ -12,10 +12,11 @@ import { Card, CardTitle } from '../components/Card';
 import { CARD_SHAPES, CARD_WIDTH, ShareCard, cardHeight, isCardPrepared, prepareCard, type CardShape } from '../components/ShareCard';
 import { getSessionSummary } from '../db/repository';
 import type { SessionStackParamList } from '../navigation/types';
-import { colors, fontSize, radius, spacing } from '../theme';
+import { colors, fontSize, radius, spacing, themed } from '../theme';
 import type { SessionSummary } from '../types';
 import { formatDateDisplay } from '../utils/date';
 import { formatVolume, formatWeight } from '../utils/format';
+import { muscleLabel, t, tn } from '../i18n';
 
 type Props = NativeStackScreenProps<SessionStackParamList, 'SessionSummary'>;
 
@@ -24,11 +25,17 @@ let lastShape: CardShape = 'dumbbell';
 
 function summaryToText(summary: SessionSummary): string {
   const lines: string[] = [];
-  lines.push(`IRON LOG — ${summary.name || 'WORKOUT'}`);
+  lines.push(`IRON LOG — ${summary.name || t('WORKOUT')}`);
   lines.push(formatDateDisplay(summary.date));
   lines.push('');
-  lines.push(`${formatVolume(summary.volume)} kg volume · ${summary.setCount} sets · ${summary.exerciseCount} exercises`);
-  if (summary.muscleGroups.length > 0) lines.push(summary.muscleGroups.join(' · '));
+  lines.push(
+    [
+      t('{v} kg volume', { v: formatVolume(summary.volume) }),
+      tn(summary.setCount, '{n} set', '{n} sets'),
+      tn(summary.exerciseCount, '{n} exercise', '{n} exercises'),
+    ].join(' · ')
+  );
+  if (summary.muscleGroups.length > 0) lines.push(summary.muscleGroups.map(muscleLabel).join(' · '));
   lines.push('');
   for (const ex of summary.exercises) {
     const bits = [ex.name];
@@ -86,10 +93,10 @@ export function SessionSummaryScreen({ route }: Props) {
   /** Rasterise the SVG card to raw base64 PNG (no data: prefix). */
   function captureBase64(): Promise<string> {
     const node = svgRef.current;
-    if (!node || !summary) return Promise.reject(new Error('The card is not ready yet.'));
+    if (!node || !summary) return Promise.reject(new Error(t('The card is not ready yet.')));
     const height = cardHeight(summary, shape);
     return new Promise<string>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('Rendering the image timed out.')), 10000);
+      const timer = setTimeout(() => reject(new Error(t('Rendering the image timed out.'))), 10000);
       try {
         node.toDataURL(
           (data: string) => {
@@ -116,10 +123,10 @@ export function SessionSummaryScreen({ route }: Props) {
       file.create();
       file.write(base64, { encoding: 'base64' });
 
-      if (!(await Sharing.isAvailableAsync())) throw new Error('Sharing is not available on this device.');
-      await Sharing.shareAsync(file.uri, { mimeType: 'image/png', dialogTitle: 'Share workout', UTI: 'public.png' });
+      if (!(await Sharing.isAvailableAsync())) throw new Error(t('Sharing is not available on this device.'));
+      await Sharing.shareAsync(file.uri, { mimeType: 'image/png', dialogTitle: t('Share workout'), UTI: 'public.png' });
     } catch (e) {
-      Alert.alert('Could not share image', e instanceof Error ? e.message : String(e));
+      Alert.alert(t('Could not share image'), e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(null);
     }
@@ -131,9 +138,9 @@ export function SessionSummaryScreen({ route }: Props) {
     setStatus(null);
     try {
       await Clipboard.setImageAsync(await captureBase64());
-      setStatus('Image copied — long-press and paste it into any app that takes images.');
+      setStatus(t('Image copied — long-press and paste it into any app that takes images.'));
     } catch (e) {
-      Alert.alert('Could not copy image', e instanceof Error ? e.message : String(e));
+      Alert.alert(t('Could not copy image'), e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(null);
     }
@@ -144,7 +151,7 @@ export function SessionSummaryScreen({ route }: Props) {
     try {
       await Share.share({ message: summaryToText(summary) });
     } catch (e) {
-      Alert.alert('Could not share', String(e));
+      Alert.alert(t('Could not share'), String(e));
     }
   }
 
@@ -152,16 +159,16 @@ export function SessionSummaryScreen({ route }: Props) {
     if (!summary) return;
     try {
       await Clipboard.setStringAsync(summaryToText(summary));
-      setStatus('Stats copied as text.');
+      setStatus(t('Stats copied as text.'));
     } catch (e) {
-      Alert.alert('Could not copy', String(e));
+      Alert.alert(t('Could not copy'), String(e));
     }
   }
 
   if (!summary) {
     return (
       <View style={styles.container}>
-        <Text style={styles.loading}>Loading…</Text>
+        <Text style={styles.loading}>{t('Loading…')}</Text>
       </View>
     );
   }
@@ -176,7 +183,7 @@ export function SessionSummaryScreen({ route }: Props) {
       <ScrollView contentContainerStyle={styles.content}>
         <Card>
           <CardTitle
-            title="Shareable card"
+            title={t('Shareable card')}
             right={
               <View style={styles.segment}>
                 {([true, false] as const).map((value) => (
@@ -186,7 +193,7 @@ export function SessionSummaryScreen({ route }: Props) {
                     onPress={() => setScrim(value)}
                   >
                     <Text style={[styles.segmentText, scrim === value && styles.segmentTextActive]}>
-                      {value ? 'PANEL' : 'CLEAR'}
+                      {value ? t('PANEL') : t('CLEAR')}
                     </Text>
                   </Pressable>
                 ))}
@@ -195,8 +202,8 @@ export function SessionSummaryScreen({ route }: Props) {
           />
           <Text style={styles.hint}>
             {scrim
-              ? 'PNG with a see-through dark panel — the photo shows through but the text stays readable.'
-              : 'Fully transparent PNG. Best over a dark photo; white text can disappear on a light one.'}
+              ? t('PNG with a see-through dark panel — the photo shows through but the text stays readable.')
+              : t('Fully transparent PNG. Best over a dark photo; white text can disappear on a light one.')}
           </Text>
           <ScrollView
             horizontal
@@ -206,7 +213,7 @@ export function SessionSummaryScreen({ route }: Props) {
           >
             {CARD_SHAPES.map((s) => (
               <Pressable key={s.id} style={[styles.shapeChip, shape === s.id && styles.shapeChipActive]} onPress={() => setShape(s.id)}>
-                <Text style={[styles.shapeChipText, shape === s.id && styles.shapeChipTextActive]}>{s.label}</Text>
+                <Text style={[styles.shapeChipText, shape === s.id && styles.shapeChipTextActive]}>{t(s.label)}</Text>
               </Pressable>
             ))}
           </ScrollView>
@@ -231,7 +238,7 @@ export function SessionSummaryScreen({ route }: Props) {
             ) : (
               <View style={[styles.building, { height: fullHeight * scale }]}>
                 <ActivityIndicator color={colors.primary} />
-                <Text style={styles.buildingText}>Building your card…</Text>
+                <Text style={styles.buildingText}>{t('Building your card…')}</Text>
               </View>
             )}
           </View>
@@ -246,37 +253,37 @@ export function SessionSummaryScreen({ route }: Props) {
           )}
           <View style={styles.actionRow}>
             <View style={styles.actionCell}>
-              <Button title="Copy image" icon="copy-outline" onPress={handleCopyImage} loading={busy === 'copy'} disabled={!cardReady} />
+              <Button title={t('Copy image')} icon="copy-outline" onPress={handleCopyImage} loading={busy === 'copy'} disabled={!cardReady} />
             </View>
             <View style={styles.actionCell}>
-              <Button title="Share image" variant="secondary" icon="share-outline" onPress={handleShareImage} loading={busy === 'share'} disabled={!cardReady} />
+              <Button title={t('Share image')} variant="secondary" icon="share-outline" onPress={handleShareImage} loading={busy === 'share'} disabled={!cardReady} />
             </View>
           </View>
           <View style={styles.gap} />
           <View style={styles.actionRow}>
             <View style={styles.actionCell}>
-              <Button title="Copy text" variant="secondary" icon="clipboard-outline" onPress={handleCopyText} />
+              <Button title={t('Copy text')} variant="secondary" icon="clipboard-outline" onPress={handleCopyText} />
             </View>
             <View style={styles.actionCell}>
-              <Button title="Share text" variant="secondary" icon="text-outline" onPress={handleShareText} />
+              <Button title={t('Share text')} variant="secondary" icon="text-outline" onPress={handleShareText} />
             </View>
           </View>
         </View>
 
         <Card>
-          <CardTitle title="Breakdown" />
+          <CardTitle title={t('Breakdown')} />
           <View style={styles.statRow}>
             <View style={styles.stat}>
               <Text style={styles.statValue}>{formatVolume(summary.volume)}</Text>
-              <Text style={styles.statLabel}>VOLUME (KG)</Text>
+              <Text style={styles.statLabel}>{t('VOLUME (KG)')}</Text>
             </View>
             <View style={styles.stat}>
               <Text style={styles.statValue}>{summary.setCount}</Text>
-              <Text style={styles.statLabel}>SETS</Text>
+              <Text style={styles.statLabel}>{t('SETS')}</Text>
             </View>
             <View style={styles.stat}>
               <Text style={styles.statValue}>{summary.workingSets}</Text>
-              <Text style={styles.statLabel}>WORKING</Text>
+              <Text style={styles.statLabel}>{t('WORKING')}</Text>
             </View>
           </View>
           {summary.exercises.map((ex, i) => (
@@ -284,7 +291,7 @@ export function SessionSummaryScreen({ route }: Props) {
               <View style={styles.exLeft}>
                 <Text style={styles.exName}>{ex.name}</Text>
                 {(ex.machine || ex.muscleGroup) && (
-                  <Text style={styles.exSub}>{[ex.machine, ex.muscleGroup].filter(Boolean).join(' · ')}</Text>
+                  <Text style={styles.exSub}>{[ex.machine, ex.muscleGroup ? muscleLabel(ex.muscleGroup) : ''].filter(Boolean).join(' · ')}</Text>
                 )}
               </View>
               {ex.isPR && (
@@ -302,7 +309,7 @@ export function SessionSummaryScreen({ route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -509,4 +516,4 @@ const styles = StyleSheet.create({
   exSetPr: {
     color: colors.primary,
   },
-});
+}));

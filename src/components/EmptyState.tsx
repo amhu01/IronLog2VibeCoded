@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { colors, fontSize, radius, spacing } from '../theme';
+import { Text, View } from 'react-native';
+import { colors, fontSize, radius, spacing, themed } from '../theme';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -23,7 +23,7 @@ export function EmptyState({ icon, title, body }: EmptyStateProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   wrap: {
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
@@ -51,4 +51,4 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     lineHeight: 19,
   },
-});
+}));

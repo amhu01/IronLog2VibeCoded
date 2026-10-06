@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
-import { colors, fontSize, radius, spacing } from '../theme';
+import { colors, fontSize, radius, spacing, themed } from '../theme';
 import { MUSCLE_GROUPS } from '../types';
 import { makeDraftSet, type DraftExercise, type DraftSet } from '../utils/sessionDraft';
 import { SetRow } from './SetRow';
+import { muscleLabel, t } from '../i18n';
 
 interface ExerciseCardProps {
   index: number;
@@ -63,7 +64,7 @@ export function ExerciseCard({ index, exercise, machineSuggestions, onChange, on
         </Pressable>
       </View>
 
-      <Text style={styles.fieldLabel}>MUSCLE GROUP</Text>
+      <Text style={styles.fieldLabel}>{t('MUSCLE GROUP')}</Text>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -79,19 +80,19 @@ export function ExerciseCard({ index, exercise, machineSuggestions, onChange, on
               style={[styles.chip, active && styles.chipActive]}
               onPress={() => onChange({ ...exercise, muscleGroup: active ? '' : g })}
             >
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>{g}</Text>
+              <Text style={[styles.chipText, active && styles.chipTextActive]}>{muscleLabel(g)}</Text>
             </Pressable>
           );
         })}
       </ScrollView>
 
       <View onLayout={(e) => (machineY.current = e.nativeEvent.layout.y)}>
-        <Text style={styles.fieldLabel}>MACHINE / BRAND (OPTIONAL)</Text>
+        <Text style={styles.fieldLabel}>{t('MACHINE / BRAND (OPTIONAL)')}</Text>
         <View style={[styles.machineWrap, machineFocused && styles.machineWrapFocused]}>
           <Ionicons name="cog-outline" size={16} color={machineFocused ? colors.primary : colors.textFaint} />
           <TextInput
             style={styles.machineInput}
-            placeholder="E.G. HAMMER STRENGTH"
+            placeholder={t('E.G. HAMMER STRENGTH')}
             placeholderTextColor={colors.textFaint}
             value={exercise.machine}
             onChangeText={(v) => onChange({ ...exercise, machine: v.toUpperCase() })}
@@ -130,10 +131,10 @@ export function ExerciseCard({ index, exercise, machineSuggestions, onChange, on
       </View>
 
       <View onLayout={(e) => (notesY.current = e.nativeEvent.layout.y)}>
-        <Text style={styles.fieldLabel}>NOTES</Text>
+        <Text style={styles.fieldLabel}>{t('NOTES')}</Text>
         <TextInput
           style={styles.notesInput}
-          placeholder="Seat 4, slow negatives, felt the left side more…"
+          placeholder={t('Seat 4, slow negatives, felt the left side more…')}
           placeholderTextColor={colors.textFaint}
           value={exercise.notes}
           onChangeText={(v) => onChange({ ...exercise, notes: v })}
@@ -144,7 +145,7 @@ export function ExerciseCard({ index, exercise, machineSuggestions, onChange, on
           <Pressable style={styles.lastNote} onPress={() => onChange({ ...exercise, notes: exercise.lastNote })} hitSlop={4}>
             <Ionicons name="arrow-undo-outline" size={14} color={colors.primary} />
             <Text style={styles.lastNoteText} numberOfLines={3}>
-              <Text style={styles.lastNoteLabel}>LAST TIME  </Text>
+              <Text style={styles.lastNoteLabel}>{t('LAST TIME')}  </Text>
               {exercise.lastNote}
             </Text>
           </Pressable>
@@ -153,8 +154,8 @@ export function ExerciseCard({ index, exercise, machineSuggestions, onChange, on
 
       <View style={styles.bandedRow}>
         <View style={styles.bandedText}>
-          <Text style={styles.bandedLabel}>Banded / assisted</Text>
-          <Text style={styles.bandedHint}>Adds a base resistance to every set</Text>
+          <Text style={styles.bandedLabel}>{t('Banded / assisted')}</Text>
+          <Text style={styles.bandedHint}>{t('Adds a base resistance to every set')}</Text>
         </View>
         <Switch
           value={exercise.hasBaseResistance}
@@ -165,10 +166,10 @@ export function ExerciseCard({ index, exercise, machineSuggestions, onChange, on
       </View>
       {exercise.hasBaseResistance && (
         <View style={styles.baseWrap}>
-          <Text style={styles.baseLabel}>BASE</Text>
+          <Text style={styles.baseLabel}>{t('BASE')}</Text>
           <TextInput
             style={styles.baseInput}
-            placeholder="e.g. -20"
+            placeholder={t('e.g. -20')}
             placeholderTextColor={colors.textFaint}
             keyboardType="numbers-and-punctuation"
             value={exercise.baseResistance}
@@ -178,9 +179,9 @@ export function ExerciseCard({ index, exercise, machineSuggestions, onChange, on
       )}
 
       <View style={styles.setsHeaderRow}>
-        <Text style={[styles.setsHeaderText, styles.setsHeaderIndex]}>SET</Text>
-        <Text style={[styles.setsHeaderText, styles.setsHeaderCol]}>WEIGHT</Text>
-        <Text style={[styles.setsHeaderText, styles.setsHeaderCol]}>REPS</Text>
+        <Text style={[styles.setsHeaderText, styles.setsHeaderIndex]}>{t('SET')}</Text>
+        <Text style={[styles.setsHeaderText, styles.setsHeaderCol]}>{t('WEIGHT')}</Text>
+        <Text style={[styles.setsHeaderText, styles.setsHeaderCol]}>{t('REPS')}</Text>
         <View style={styles.setsHeaderSpacer} />
       </View>
       {exercise.sets.map((s, i) => (
@@ -189,13 +190,13 @@ export function ExerciseCard({ index, exercise, machineSuggestions, onChange, on
 
       <Pressable style={({ pressed }) => [styles.addSetBtn, pressed && styles.addSetBtnPressed]} onPress={addSet}>
         <Ionicons name="add" size={18} color={colors.primary} />
-        <Text style={styles.addSetText}>Add set</Text>
+        <Text style={styles.addSetText}>{t('Add set')}</Text>
       </Pressable>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
@@ -440,4 +441,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: fontSize.small,
   },
-});
+}));

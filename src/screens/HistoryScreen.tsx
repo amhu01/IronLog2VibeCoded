@@ -2,14 +2,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useCallback, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { EmptyState } from '../components/EmptyState';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { getSessionsList, type SessionListItem } from '../db/repository';
 import type { HistoryStackParamList } from '../navigation/types';
-import { colors, fontSize, radius, spacing } from '../theme';
+import { colors, fontSize, radius, spacing, themed } from '../theme';
 import { formatDateParts, formatVolume } from '../utils/format';
+import { muscleLabel, t, tn } from '../i18n';
 
 type Props = NativeStackScreenProps<HistoryStackParamList, 'HistoryList'>;
 
@@ -29,11 +30,11 @@ export function HistoryScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScreenHeader
-        title="History"
-        subtitle={sessions.length > 0 ? `${sessions.length} session${sessions.length === 1 ? '' : 's'}` : undefined}
+        title={t('History')}
+        subtitle={sessions.length > 0 ? tn(sessions.length, '{n} session', '{n} sessions') : undefined}
       />
       {!loading && sessions.length === 0 && (
-        <EmptyState icon="time-outline" title="No sessions yet" body="Your logged workouts will show up here, newest first." />
+        <EmptyState icon="time-outline" title={t('No sessions yet')} body={t('Your logged workouts will show up here, newest first.')} />
       )}
       <FlatList
         data={sessions}
@@ -41,8 +42,13 @@ export function HistoryScreen({ navigation }: Props) {
         contentContainerStyle={styles.list}
         renderItem={({ item }) => {
           const { day, month, weekday } = formatDateParts(item.date);
-          const exercisesLine = item.exerciseNames.join(' · ') || 'No exercises';
-          const meta = [weekday, item.muscleGroups.length ? item.muscleGroups.join(', ') : `${item.exerciseNames.length} exercise${item.exerciseNames.length === 1 ? '' : 's'}`];
+          const exercisesLine = item.exerciseNames.join(' · ') || t('No exercises');
+          const meta = [
+            weekday,
+            item.muscleGroups.length
+              ? item.muscleGroups.map(muscleLabel).join(', ')
+              : tn(item.exerciseNames.length, '{n} exercise', '{n} exercises'),
+          ];
           return (
             <Pressable
               style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
@@ -66,8 +72,8 @@ export function HistoryScreen({ navigation }: Props) {
                 ) : null}
               </View>
               <View style={styles.right}>
-                <Text style={styles.stat}>{item.setCount} sets</Text>
-                {item.volume > 0 && <Text style={styles.statMuted}>{formatVolume(item.volume)} vol</Text>}
+                <Text style={styles.stat}>{tn(item.setCount, '{n} set', '{n} sets')}</Text>
+                {item.volume > 0 && <Text style={styles.statMuted}>{t('{v} vol', { v: formatVolume(item.volume) })}</Text>}
                 <Ionicons name="chevron-forward" size={16} color={colors.textFaint} style={styles.chevron} />
               </View>
             </Pressable>
@@ -78,7 +84,7 @@ export function HistoryScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -160,4 +166,4 @@ const styles = StyleSheet.create({
   chevron: {
     marginTop: 2,
   },
-});
+}));

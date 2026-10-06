@@ -1,3 +1,4 @@
+import { dateLocale } from '../i18n';
 import { parseDateString } from './date';
 
 export function formatWeight(n: number): string {
@@ -18,14 +19,14 @@ export function formatVolume(v: number): string {
 }
 
 export function formatDateShort(date: string): string {
-  return parseDateString(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return parseDateString(date).toLocaleDateString(dateLocale(), { month: 'short', day: 'numeric' });
 }
 
 export function formatDateParts(date: string): { day: string; month: string; weekday: string } {
   const d = parseDateString(date);
   return {
     day: String(d.getDate()),
-    month: d.toLocaleDateString(undefined, { month: 'short' }).toUpperCase(),
-    weekday: d.toLocaleDateString(undefined, { weekday: 'long' }),
+    month: d.toLocaleDateString(dateLocale(), { month: 'short' }).toUpperCase(),
+    weekday: d.toLocaleDateString(dateLocale(), { weekday: 'long' }),
   };
 }

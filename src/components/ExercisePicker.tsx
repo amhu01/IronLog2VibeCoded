@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { colors, fontSize, radius, spacing } from '../theme';
+import { colors, fontSize, radius, spacing, themed } from '../theme';
 import type { ExerciseCatalogEntry } from '../types';
 import { ExerciseSearchModal } from './ExerciseSearchModal';
+import { t } from '../i18n';
 
 interface ExercisePickerProps {
   catalog: ExerciseCatalogEntry[];
@@ -33,13 +34,13 @@ export function ExercisePicker({ catalog, onSubmit }: ExercisePickerProps) {
 
   return (
     <View>
-      <Text style={styles.label}>ADD EXERCISE</Text>
+      <Text style={styles.label}>{t('ADD EXERCISE')}</Text>
       <View style={styles.row}>
         <View style={[styles.inputWrap, focused && styles.inputWrapFocused]}>
           <Ionicons name="barbell-outline" size={18} color={focused ? colors.primary : colors.textMuted} />
           <TextInput
             style={styles.input}
-            placeholder="E.G. BENCH PRESS"
+            placeholder={t('E.G. BENCH PRESS')}
             placeholderTextColor={colors.textFaint}
             value={text}
             onChangeText={(v) => setText(v.toUpperCase())}
@@ -89,7 +90,7 @@ export function ExercisePicker({ catalog, onSubmit }: ExercisePickerProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   label: {
     color: colors.textMuted,
     fontSize: fontSize.tiny,
@@ -173,4 +174,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.5,
   },
-});
+}));

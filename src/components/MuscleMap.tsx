@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import Svg, { G, Path, Text as SvgText } from 'react-native-svg';
-import { colors, fontSize, muscle, spacing } from '../theme';
+import { colors, fontSize, muscle, spacing, themed } from '../theme';
 import { BACK_PARTS, FRONT_PARTS, VIEW_H, VIEW_W, groupsForRegion, type BodyPart, type MuscleRegion } from './muscleMapShapes';
+import { t } from '../i18n';
 
 function hexToRgb(hex: string): number[] {
   const n = parseInt(hex.slice(1), 16);
@@ -20,7 +21,6 @@ export function muscleScale(idle: string, hot: string): string[] {
   return [0, 0.38, 0.6, 0.8, 1].map((t) => `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * t)).join(', ')})`);
 }
 
-const APP_SCALE = muscleScale(muscle.idle, colors.primary);
 
 /** Horizontal gap between the front and back figures, in view units. */
 const VIEW_GAP = 24;
@@ -67,10 +67,10 @@ export function MuscleFigure(props: FigureProps) {
       {labels && (
         <>
       <SvgText x={VIEW_W / 2} y={14} fontSize={13} fontWeight="800" fill={labelColor} textAnchor="middle" letterSpacing={2}>
-        FRONT
+        {t('FRONT')}
       </SvgText>
       <SvgText x={VIEW_W + VIEW_GAP + VIEW_W / 2} y={14} fontSize={13} fontWeight="800" fill={labelColor} textAnchor="middle" letterSpacing={2}>
-        BACK
+        {t('BACK')}
       </SvgText>
         </>
       )}
@@ -100,19 +100,19 @@ export function MuscleMap({ levels, maxWidth = 360, describe }: MuscleMapProps) 
         <Svg width={width} height={height} viewBox={`0 0 ${FIGURE_W} ${FIGURE_H}`}>
           <MuscleFigure
             levels={levels}
-            scale={APP_SCALE}
+            scale={muscleScale(muscle.idle, colors.primary)}
             neutral={muscle.neutral}
             labelColor={colors.textFaint}
             onPressRegion={describe ? (r) => setCaption(describe(r, groupsForRegion(r))) : undefined}
           />
         </Svg>
       )}
-      {describe && <Text style={styles.caption}>{caption ?? 'Tap a muscle'}</Text>}
+      {describe && <Text style={styles.caption}>{caption ?? t('Tap a muscle')}</Text>}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   wrap: {
     alignItems: 'center',
   },
@@ -123,4 +123,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.sm,
   },
-});
+}));

@@ -1,3 +1,5 @@
+import { dateLocale } from '../i18n';
+
 export function dateToString(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -15,7 +17,7 @@ export function parseDateString(date: string): Date {
 }
 
 export function formatDateDisplay(date: string): string {
-  return parseDateString(date).toLocaleDateString(undefined, {
+  return parseDateString(date).toLocaleDateString(dateLocale(), {
     weekday: 'short',
     year: 'numeric',
     month: 'short',
