@@ -73,6 +73,9 @@ async function openAndMigrate(): Promise<SQLite.SQLiteDatabase> {
   // itself is unchanged, so rename in place rather than losing the marks.
   await renameColumnIfNeeded(db, 'sets', 'rir', 'ws');
 
+  // v10 replaced the CORE tag with ABS (the muscle map has abs + obliques, not "core").
+  await db.runAsync(`UPDATE session_exercises SET muscle_group = 'ABS' WHERE muscle_group = 'CORE'`);
+
   // Exercise names are stored uppercase; fold any rows written before that rule.
   await db.runAsync(`UPDATE session_exercises SET name = UPPER(name) WHERE name <> UPPER(name)`);
 

@@ -30,6 +30,12 @@ moved to the top of the Log form, dropdowns instead of chip rows for session
 names and the Progress machine filter, Progress session rows that show every
 set and open the session, a training-calendar heatmap on Stats, and a choice
 of five share-card shapes.
+v10 (2026-10-06): a **front/back muscle map** — on Stats (sets per muscle,
+7 DAYS / ALL), on Progress (what the selected exercise targets) and in the
+top-right of the share card (what that session hit). Primary muscle only, by
+Amir's choice: it should push him to tag exercises accurately. The tag list
+got finer for it (TRAPS, LATS, LOWER BACK, FOREARMS, ABS, OBLIQUES, ADDUCTORS;
+ABS replaces CORE).
 This file is the source of truth
 for plan, progress, decisions, and blockers — update it continuously as work
 happens. If a session ends (out of context/tokens) or a different model picks
@@ -310,6 +316,37 @@ Run: `npx expo start` then open in Expo Go. Typecheck: `npx tsc --noEmit`.
      of the screen into [src/utils/backup.ts](src/utils/backup.ts) so it can be
      verified headlessly, exports write `ws`, and import accepts **either** `ws`
      or the pre-v4 `rir` key (`ws: !!(o.ws ?? o.rir)`) — keep that fallback.
+
+6. **Muscle map** (v10).
+   - Geometry: [muscleMapShapes.ts](src/components/muscleMapShapes.ts) —
+     hand-drawn SVG paths on a 200×420 view per side, drawn for the figure's
+     left half and mirrored (`scale(-1, 1)`) unless `center`. Each muscle is
+     its own path with a small gap, so the body reads from the shapes alone (no
+     outline). Non-muscle parts (head, hands, knees, feet, shins) are neutral.
+     `GROUP_REGIONS` maps each tag to regions: general tags light everything
+     they cover (BACK → upperBack + lats, SHOULDERS → delts), specific ones
+     just theirs; CARDIO has none. `regionLevels(setsByGroup)` sums sets per
+     region (lats gets BACK + LATS) and buckets to 1–4 relative to the busiest.
+     Keep shapes non-overlapping — the first draft overlapped traps and upper
+     back on the back view and it rendered muddy.
+   - Rendering: [MuscleMap.tsx](src/components/MuscleMap.tsx) —
+     `MuscleFigure` is a plain SVG `<G>` (both views side by side) so the share
+     card can embed it; `MuscleMap` is the in-app wrapper that measures its
+     container, caps at `maxWidth`, and shows a tap caption. Colours are
+     **opaque** blends from `muscle.idle` to orange (`muscleScale`):
+     translucent orange over a dark card reads brown, darker than an untrained
+     muscle, which is backwards.
+   - Stats: inside the "Sets by muscle group" card, above the bars, sharing the
+     7 DAYS / ALL toggle; tap a muscle → "BACK: 3 sets · LATS: 6 sets".
+     Progress: a "Targets" card at the bottom (not the top — a 260-pt card
+     there pushed the chart and sessions off-screen), lighting the exercise's
+     newest muscle group, or a nudge to tag it. Share card: top-right, 380 px
+     wide; title/date/pills get the remaining width (title picks 72/56/44 px by
+     what fits), and the map is omitted — full-width header — when nothing in
+     the session maps to the body.
+   - Tags: `MUSCLE_GROUPS` is ordered top to bottom of the body. CORE → ABS via
+     an idempotent `UPDATE` on open, plus `MUSCLE_GROUP_ALIASES` applied on
+     every write (`normGroup`) so CORE in an imported backup also lands as ABS.
 
 ## Storage
 
@@ -661,6 +698,27 @@ confirmed all 3 persisted correctly with exact same values.")
   KETTLEBELL/PLATE/TROPHY/HEART, "ALL MACHINES", "Tap a day for details" and
   `ProgressMain`; no rest-timer strings remain.
 
+- v10 verified (2026-10-06): `npx tsc --noEmit` clean; `npx expo export
+  --platform android` bundled 1134 modules. Muscle map rendered through the
+  SVG shim + sharp and looked at in three passes: (1) it read as a body but
+  traps and upper back overlapped on the back view; (2) overlap fixed, but
+  lightly trained muscles rendered *darker* than untrained ones (translucent
+  orange → brown); (3) opaque blends, levels now read correctly — pull day
+  lights lats brightest, biceps medium, traps faint; leg day lights quads.
+  Share card rendered for pull / 14-lift upper / legs / untagged sessions:
+  map sits top-right, enlarged 300 → 380 px after the first render looked too
+  small, and the untagged session correctly falls back to a full-width
+  header. 11 checks against better-sqlite3 seeded with the v9 schema: a CORE
+  row became ABS with machine/notes/sets untouched; writing "core" stores
+  ABS; a backup with "Core" imports as ABS; every tag but CARDIO maps to a
+  drawn region; `regionLevels` sums LATS + BACK into lats and ignores
+  CARDIO / unknown tags; an empty map yields no NaN.
+
+- v10 APK verified (2026-10-06): `scripts/build-apk.sh` exit 0 (stages
+  1m51s / 53s / 2m20s, JS-only). 34 MiB, `apksigner verify` passes; the
+  Hermes bundle contains "Targets", "Tap a muscle", LOWER BACK / ADDUCTORS /
+  OBLIQUES and the CORE → ABS migration SQL.
+
 ## Blockers / known issues
 
 (Document anything infeasible, any fallback taken instead of the original
@@ -763,7 +821,7 @@ plan, or anything left unfinished, with reasoning.)
 ## Final build
 
 - Local APK: latest build is whatever `scripts/build-apk.sh` last produced
-  (v9 on 2026-10-06; the cold v3 build of 2026-09-17 is described here) —
+  (v10 on 2026-10-06; the cold v3 build of 2026-09-17 is described here) —
   `iron-log.apk` at the project root (gitignored via `*.apk`), 34 MiB,
   arm64-v8a, signed with the debug keystore (fine for sideloading; generate a
   real keystore only if you ever publish to the Play Store). Built with

@@ -1,16 +1,28 @@
+// Ordered top to bottom of the body. Each one maps to regions on the muscle map
+// (see GROUP_REGIONS); BACK and SHOULDERS are the general tags, LATS / TRAPS /
+// LOWER BACK the specific ones. CORE was replaced by ABS in v10.
 export const MUSCLE_GROUPS = [
   'CHEST',
-  'BACK',
   'SHOULDERS',
+  'TRAPS',
+  'BACK',
+  'LATS',
+  'LOWER BACK',
   'BICEPS',
   'TRICEPS',
+  'FOREARMS',
+  'ABS',
+  'OBLIQUES',
   'QUADS',
   'HAMSTRINGS',
   'GLUTES',
+  'ADDUCTORS',
   'CALVES',
-  'CORE',
   'CARDIO',
 ] as const;
+
+/** Old tag names still found in databases and backups, mapped to their current name. */
+export const MUSCLE_GROUP_ALIASES: Record<string, string> = { CORE: 'ABS' };
 
 export type MuscleGroup = (typeof MUSCLE_GROUPS)[number];
 

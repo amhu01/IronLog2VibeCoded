@@ -6,6 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActivityHeatmap } from '../components/ActivityHeatmap';
 import { Card, CardTitle } from '../components/Card';
 import { EmptyState } from '../components/EmptyState';
+import { MuscleMap } from '../components/MuscleMap';
+import { regionLevels } from '../components/muscleMapShapes';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { getStats } from '../db/repository';
 import { colors, fontSize, radius, spacing } from '../theme';
@@ -25,6 +27,10 @@ function StatTile({ label, value, icon }: { label: string; value: string | numbe
       <Text style={styles.tileLabel}>{label}</Text>
     </View>
   );
+}
+
+function setsByGroup(rows: MuscleGroupSets[]): Record<string, number> {
+  return Object.fromEntries(rows.filter((r) => r.muscleGroup !== '').map((r) => [r.muscleGroup, r.sets]));
 }
 
 function MuscleBars({ rows }: { rows: MuscleGroupSets[] }) {
@@ -53,6 +59,7 @@ function MuscleBars({ rows }: { rows: MuscleGroupSets[] }) {
 export function StatsScreen() {
   const [stats, setStats] = useState<StatsSummary | null>(null);
   const [range, setRange] = useState<'week' | 'all'>('week');
+  const muscleRows = stats ? (range === 'week' ? stats.setsByMuscleGroupLast7Days : stats.setsByMuscleGroupAllTime) : [];
 
   useFocusEffect(
     useCallback(() => {
@@ -93,7 +100,19 @@ export function StatsScreen() {
                 </View>
               }
             />
-            <MuscleBars rows={range === 'week' ? stats.setsByMuscleGroupLast7Days : stats.setsByMuscleGroupAllTime} />
+            <MuscleMap
+              levels={regionLevels(setsByGroup(muscleRows))}
+              describe={(_, groups) =>
+                groups
+                  .map((g) => {
+                    const n = setsByGroup(muscleRows)[g] ?? 0;
+                    return `${g}: ${n} set${n === 1 ? '' : 's'}`;
+                  })
+                  .join('  ·  ')
+              }
+            />
+            <View style={styles.mapGap} />
+            <MuscleBars rows={muscleRows} />
           </Card>
 
           <Card>
@@ -212,6 +231,9 @@ const styles = StyleSheet.create({
   },
   segmentTextActive: {
     color: colors.primaryText,
+  },
+  mapGap: {
+    height: spacing.md,
   },
   barRow: {
     flexDirection: 'row',

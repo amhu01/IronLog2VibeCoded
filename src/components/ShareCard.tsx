@@ -1,6 +1,8 @@
 import React, { forwardRef } from 'react';
 import Svg, { G, Rect, Text as SvgText } from 'react-native-svg';
 import type { SessionSummary, SummaryExercise } from '../types';
+import { FIGURE_H, FIGURE_W, MuscleFigure, muscleScale } from './MuscleMap';
+import { GROUP_REGIONS, regionLevels } from './muscleMapShapes';
 import { formatDateDisplay } from '../utils/date';
 import { formatVolume } from '../utils/format';
 
@@ -11,6 +13,8 @@ const CONTENT_WIDTH = CARD_WIDTH - PAD * 2;
 const ORANGE = '#ff8a3d';
 const ORANGE_LIGHT = '#ffb27a';
 const WHITE = '#ffffff';
+const MAP_WIDTH = 380;
+const MAP_SCALE = muscleScale('#4a5263', ORANGE);
 
 // Word art: every lift once (big, sized by work done), then repeated as faint filler
 // until the words alone trace a shape (dumbbell, kettlebell…). No outline is drawn.
@@ -426,7 +430,7 @@ interface Pill {
 }
 
 /** Muscle-group pills wrap onto more rows rather than getting dropped off the end. */
-function layoutPills(groups: string[]): { rows: Pill[][]; height: number } {
+function layoutPills(groups: string[], maxWidth: number): { rows: Pill[][]; height: number } {
   if (groups.length === 0) return { rows: [], height: 0 };
   const rows: Pill[][] = [];
   let row: Pill[] = [];
@@ -434,7 +438,7 @@ function layoutPills(groups: string[]): { rows: Pill[][]; height: number } {
   for (const text of groups) {
     const w = textWidth(text, 26, 800) + 52;
     const candidate = row.length === 0 ? w : rowWidth + 14 + w;
-    if (row.length > 0 && candidate > CONTENT_WIDTH) {
+    if (row.length > 0 && candidate > maxWidth) {
       rows.push(row);
       row = [];
       rowWidth = w;
@@ -456,6 +460,9 @@ function layoutPills(groups: string[]): { rows: Pill[][]; height: number } {
 
 interface Layout {
   titleSize: number;
+  titleWidth: number;
+  /** Front/back muscle map in the top-right corner, or null when nothing tagged maps to the body. */
+  map: { x: number; y: number; size: number; levels: ReturnType<typeof regionLevels> } | null;
   titleText: string;
   pillsY: number;
   pills: ReturnType<typeof layoutPills>;
@@ -483,13 +490,28 @@ function computeLayout(summary: SessionSummary, shape: CardShape): Layout {
   }
   const cached = perShape.get(shape);
   if (cached) return cached;
-  const titleText = (summary.name || 'WORKOUT').toUpperCase();
-  const titleSize = titleText.length > 26 ? 44 : titleText.length > 18 ? 56 : 72;
+  // Muscle map top-right: sets per group this session, primary muscle only. Skipped when
+  // nothing in the session is tagged with a group the body map knows.
+  const setsByGroup: Record<string, number> = {};
+  for (const ex of summary.exercises) {
+    if (GROUP_REGIONS[ex.muscleGroup]) setsByGroup[ex.muscleGroup] = (setsByGroup[ex.muscleGroup] ?? 0) + ex.setCount;
+  }
+  const mapSize = MAP_WIDTH / FIGURE_W;
+  const map =
+    Object.keys(setsByGroup).length > 0
+      ? { x: CARD_WIDTH - PAD - MAP_WIDTH, y: 64, size: mapSize, levels: regionLevels(setsByGroup) }
+      : null;
 
-  const pills = layoutPills(summary.muscleGroups);
+  // Title, date and pills share the row with the map, so they get what's left of it.
+  const titleWidth = map ? CONTENT_WIDTH - MAP_WIDTH - 36 : CONTENT_WIDTH;
+  const titleText = (summary.name || 'WORKOUT').toUpperCase();
+  const titleSize = [72, 56, 44].find((size) => textWidth(titleText, size, 800) <= titleWidth) ?? 44;
+
+  const pills = layoutPills(summary.muscleGroups, titleWidth);
   let y = 236 + 60; // eyebrow + title + date block
   const pillsY = y;
   y += pills.height;
+  if (map) y = Math.max(y, map.y + FIGURE_H * mapSize + 8);
 
   const stats: { value: string; label: string }[] = [
     { value: formatVolume(summary.volume), label: 'VOLUME KG' },
@@ -507,7 +529,7 @@ function computeLayout(summary: SessionSummary, shape: CardShape): Layout {
 
   // Keep the canvas an integer so the rasteriser is happy.
   const footerY = Math.round(cloudY + cloud.height + 76);
-  const layout = { titleSize, titleText, pillsY, pills, statsY, stats, dividerY, cloudY, cloud, footerY, height: footerY + 56 };
+  const layout = { titleSize, titleWidth, titleText, map, pillsY, pills, statsY, stats, dividerY, cloudY, cloud, footerY, height: footerY + 56 };
   perShape.set(shape, layout);
   return layout;
 }
@@ -623,13 +645,26 @@ export const ShareCard = forwardRef<React.ElementRef<typeof Svg>, ShareCardProps
         IRON LOG
       </Shadowed>
       <Shadowed x={PAD} y={182} fontSize={L.titleSize} fontWeight="800">
-        {truncateToWidth(L.titleText, L.titleSize, 800, CONTENT_WIDTH)}
+        {truncateToWidth(L.titleText, L.titleSize, 800, L.titleWidth)}
       </Shadowed>
       <Shadowed x={PAD} y={236} fontSize={32} fontWeight="600" opacity={0.82}>
         {formatDateDisplay(summary.date)}
       </Shadowed>
 
       {pillEls}
+
+      {L.map && (
+        <MuscleFigure
+          x={L.map.x}
+          y={L.map.y}
+          size={L.map.size}
+          levels={L.map.levels}
+          scale={MAP_SCALE}
+          neutral="#2a303d"
+          labelColor={WHITE}
+          labels={false}
+        />
+      )}
 
       {L.stats.map((s, i) => (
         <G key={s.label}>

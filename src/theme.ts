@@ -19,6 +19,9 @@ export const colors = {
 /** Calendar heatmap intensity, from a rest day up to the busiest day in view. */
 export const heat = [colors.surfaceAlt, 'rgba(255, 138, 61, 0.28)', 'rgba(255, 138, 61, 0.5)', 'rgba(255, 138, 61, 0.75)', colors.primary];
 
+/** Muscle map: an untrained muscle, and non-muscle parts (head, hands, knees, feet). */
+export const muscle = { idle: '#3a4252', neutral: '#262d3a' };
+
 export const spacing = {
   xs: 4,
   sm: 8,

@@ -8,6 +8,8 @@ import { Card, CardTitle } from '../components/Card';
 import { EmptyState } from '../components/EmptyState';
 import { ExerciseSearchModal } from '../components/ExerciseSearchModal';
 import { LineChart } from '../components/LineChart';
+import { MuscleMap } from '../components/MuscleMap';
+import { GROUP_REGIONS, regionLevels } from '../components/muscleMapShapes';
 import { OptionSheet, SelectField } from '../components/OptionSheet';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { getExerciseCatalog, getProgressForExercise, type ProgressPoint } from '../db/repository';
@@ -111,6 +113,8 @@ export function ProgressScreen({ navigation }: Props) {
   const chartPoints = points.map((p) => ({ label: formatDateShort(p.date), value: p.effectiveWeight }));
   const newestFirst = [...points].reverse();
   const showMachineTags = activeFilter === null && machines.length > 1;
+  const muscleGroup = catalog.find((e) => e.name.toLowerCase() === selected?.toLowerCase())?.muscleGroup ?? '';
+  const mapped = muscleGroup !== '' && GROUP_REGIONS[muscleGroup] !== undefined;
 
   function selectExercise(name: string) {
     setSelected(name);
@@ -198,6 +202,22 @@ export function ProgressScreen({ navigation }: Props) {
               );
             })}
           </Card>
+
+          <Card>
+            <CardTitle
+              title="Targets"
+              right={muscleGroup ? <Text style={styles.targetTag}>{muscleGroup}</Text> : undefined}
+            />
+            {mapped ? (
+              <MuscleMap levels={regionLevels({ [muscleGroup]: 1 })} maxWidth={240} />
+            ) : (
+              <Text style={styles.targetHint}>
+                {muscleGroup
+                  ? `${muscleGroup} isn't on the body map.`
+                  : 'No muscle group tagged yet — pick one on this exercise next time you log it and it lights up here.'}
+              </Text>
+            )}
+          </Card>
         </ScrollView>
       )}
 
@@ -272,6 +292,17 @@ const styles = StyleSheet.create({
   },
   machineBlock: {
     marginBottom: spacing.md,
+  },
+  targetTag: {
+    color: colors.primary,
+    fontSize: fontSize.tiny,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  targetHint: {
+    color: colors.textMuted,
+    fontSize: fontSize.small,
+    lineHeight: 19,
   },
   statRow: {
     flexDirection: 'row',

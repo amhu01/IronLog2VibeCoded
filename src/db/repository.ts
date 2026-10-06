@@ -12,6 +12,7 @@ import type {
   StatsSummary,
   SummaryExercise,
 } from '../types';
+import { MUSCLE_GROUP_ALIASES } from '../types';
 import { dateToString, parseDateString } from '../utils/date';
 import { bestEffectiveWeight, countSets, exerciseVolume, sessionVolume } from '../utils/stats';
 import { parseCount, weightToKg } from '../utils/weight';
@@ -30,6 +31,11 @@ function toStorable(v: number | string): string {
 
 function normTag(v: string | undefined | null): string {
   return (v ?? '').trim().toUpperCase();
+}
+
+function normGroup(v: string | undefined | null): string {
+  const tag = normTag(v);
+  return MUSCLE_GROUP_ALIASES[tag] ?? tag;
 }
 
 interface SessionRow {
@@ -88,7 +94,7 @@ async function insertExercisesForSession(db: Db, sessionId: number, exercises: E
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       sessionId,
       normTag(ex.name),
-      normTag(ex.muscleGroup),
+      normGroup(ex.muscleGroup),
       normTag(ex.machine),
       (ex.notes ?? '').trim(),
       ex.hasBaseResistance ? 1 : 0,
